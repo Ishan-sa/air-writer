@@ -18,6 +18,8 @@ Open **http://localhost:5199** in **Google Chrome** (Chrome handles the iPhone c
 
 Everything (tracker, model) is local, so it works with no internet at the shoot.
 
+**Running it from another computer on your Wi-Fi:** `npm run dev:lan` serves over HTTPS on your network and prints a `https://192.168.x.x:5199` address. Open that in Chrome on the other computer and accept the self-signed certificate warning (*Advanced → Proceed*). The camera, projector and wall window all run on that computer.
+
 ## Shoot-day checklist
 
 ### 1. Hardware

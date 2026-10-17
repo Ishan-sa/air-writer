@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from 'vite';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import { resolve } from 'node:path';
 import { appendFileSync, mkdirSync } from 'node:fs';
 
@@ -18,9 +19,13 @@ const diagLog = (): Plugin => ({
   },
 });
 
+// `npm run dev:lan` serves over HTTPS on the local network, so another computer
+// can open the app (Chrome only allows the camera on localhost or HTTPS)
+const lan = !!process.env.LAN;
+
 export default defineConfig({
-  plugins: [diagLog()],
-  server: { port: 5199, strictPort: true },
+  plugins: [diagLog(), ...(lan ? [basicSsl()] : [])],
+  server: { port: 5199, strictPort: true, host: lan },
   build: {
     rollupOptions: {
       input: {
