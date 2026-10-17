@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Air Writer · Wall</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+      body.hide-cursor { cursor: none; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      #toast {
+        position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%);
+        font: 500 15px/1.4 -apple-system, system-ui, sans-serif; color: #c9b089;
+        letter-spacing: 0.02em; text-align: center; opacity: 0; transition: opacity 0.4s;
+        pointer-events: none; white-space: pre-line;
+      }
+      #toast.show { opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <canvas id="wall"></canvas>
+    <div id="toast"></div>
+    <script type="module" src="/src/wall/main.ts"></script>
+  </body>
+</html>
