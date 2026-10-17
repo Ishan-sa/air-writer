@@ -25,6 +25,35 @@ export function computeHomography(src: WallPoint[], dst: WallPoint[]): Homograph
   return [...h, 1];
 }
 
+/**
+ * Least-squares affine fit (scale, rotation, shear and offset; no perspective)
+ * from src points onto dst points, returned in homography form [a b c; d e f; 0 0 1].
+ * With only four hand-placed points, a full perspective fit amplifies small
+ * placement errors until the mapping flips; an affine fit averages them out
+ * and can never flip, which matters more here than exact corners.
+ */
+export function computeAffine(src: WallPoint[], dst: WallPoint[]): Homography | null {
+  if (src.length < 3 || src.length !== dst.length) return null;
+  // normal equations: (AᵀA) [a b c] = Aᵀu and (AᵀA) [d e f] = Aᵀv, rows of A = [x y 1]
+  let sxx = 0, sxy = 0, sx = 0, syy = 0, sy = 0;
+  let sxu = 0, syu = 0, su = 0, sxv = 0, syv = 0, sv = 0;
+  src.forEach(({ x, y }, i) => {
+    const { x: u, y: v } = dst[i];
+    sxx += x * x; sxy += x * y; sx += x; syy += y * y; sy += y;
+    sxu += x * u; syu += y * u; su += u; sxv += x * v; syv += y * v; sv += v;
+  });
+  const n = src.length;
+  const M = [
+    [sxx, sxy, sx],
+    [sxy, syy, sy],
+    [sx, sy, n],
+  ];
+  const abc = solve(M, [sxu, syu, su]);
+  const def = solve(M, [sxv, syv, sv]);
+  if (!abc || !def) return null;
+  return [...abc, ...def, 0, 0, 1];
+}
+
 export function applyHomography(H: Homography, p: WallPoint): WallPoint {
   const w = H[6] * p.x + H[7] * p.y + H[8];
   return {

@@ -1,5 +1,5 @@
 import type { WallPoint } from '../shared/types';
-import { computeHomography, isUsableQuad, type Homography } from './homography';
+import { computeAffine, isUsableQuad, type Homography } from './homography';
 import { CALIB_CORNERS } from './mapping';
 
 export type CalibEvent =
@@ -87,12 +87,33 @@ export class Calibration {
       return { kind: 'captured', step };
     }
     this.step = null;
-    const H = computeHomography(this.captured, CALIB_CORNERS);
+    if (minEdge(this.captured) < MIN_EDGE) {
+      return {
+        kind: 'failed',
+        reason: 'Your hand barely moved between two corners. Move your hand to each corner of the area you want to write in, then calibrate again.',
+      };
+    }
+    const H = computeAffine(this.captured, CALIB_CORNERS);
     if (!H || !isUsableQuad(this.captured)) {
-      return { kind: 'failed', reason: 'The four points didn’t form a clean rectangle. Try again, pointing at each corner in order.' };
+      return { kind: 'failed', reason: 'The four corners came out of order. Calibrate again, going top left, top right, bottom right, bottom left.' };
     }
     return { kind: 'done', H };
   }
+}
+
+/**
+ * Shortest side of the captured quad, as a fraction of the camera frame. Below
+ * this the hand moved less than ~75 px between two corners, and normal tracking
+ * wobble would be blown up many times over on the wall.
+ */
+const MIN_EDGE = 0.06;
+function minEdge(pts: WallPoint[]) {
+  let m = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    m = Math.min(m, Math.hypot(a.x - b.x, a.y - b.y));
+  }
+  return m;
 }
 
 const average = (pts: WallPoint[]) => ({

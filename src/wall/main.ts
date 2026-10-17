@@ -260,7 +260,7 @@ function drawCalibration(now: number) {
       ctx.textBaseline = 'middle';
       const tx = x + (c.x < 0.5 ? 52 : -52) * u;
       const ty = y + (c.y < 0.5 ? 56 : -56) * u;
-      ctx.fillText(`Point here and pinch  ·  ${i + 1} of 4`, tx, ty);
+      ctx.fillText(`Move your hand here and pinch  ·  ${i + 1} of 4`, tx, ty);
     }
   });
   ctx.restore();

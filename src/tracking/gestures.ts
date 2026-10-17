@@ -34,6 +34,15 @@ export function penPoint(img: Lm[]) {
 }
 
 /**
+ * False when any part of the hand touches or leaves the camera frame. A
+ * half-visible hand makes the tracker guess (recorded pinch readings jumped
+ * between 0.03 and 0.68), which drew random strokes, so it's treated as no hand.
+ */
+export function handInFrame(img: { x: number; y: number }[], margin = 0.01): boolean {
+  return img.every((p) => p.x > margin && p.x < 1 - margin && p.y > margin && p.y < 1 - margin);
+}
+
+/**
  * Pen up/down from the pinch ratio, with hysteresis (separate down/up
  * thresholds) and a short debounce so the pen doesn't flicker between letters.
  */
@@ -42,8 +51,10 @@ export class PinchDetector {
   private pending = 0;
 
   constructor(
-    public downAt = 0.3,
-    public upAt = 0.45,
+    // tuned on real recordings: a held pinch reads ~0.27-0.40 and drifts up to
+    // ~0.51 while drawing; an open hand reads 0.65+ (relaxed and moving ~0.41-0.65)
+    public downAt = 0.38,
+    public upAt = 0.57,
     public confirmFrames = 2,
   ) {}
 

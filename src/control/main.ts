@@ -2,12 +2,13 @@ import { openChannel } from '../shared/channel';
 import { load, loadRaw, save } from '../shared/storage';
 import { DEFAULT_SETTINGS, type Msg, type Settings } from '../shared/types';
 import { Calibration } from '../tracking/calibration';
-import { isOpenPalm, PalmHold, penPoint, PinchDetector, pinchRatio } from '../tracking/gestures';
+import { handInFrame, isOpenPalm, PalmHold, penPoint, PinchDetector, pinchRatio } from '../tracking/gestures';
 import type { Homography } from '../tracking/homography';
 import { CALIB_CORNERS, cameraToWall } from '../tracking/mapping';
 import { PointFilter } from '../tracking/oneEuro';
 import { createHandTracker, HandLandmarker } from '../tracking/tracker';
 import './control.css';
+import { diag, pt, r4 } from './diag';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const video = $<HTMLVideoElement>('video');
@@ -16,8 +17,10 @@ const octx = overlay.getContext('2d')!;
 const cameraSelect = $<HTMLSelectElement>('camera-select');
 const cameraMsg = $('camera-msg');
 
-let settings: Settings = load('settings', DEFAULT_SETTINGS);
-let H: Homography | null = loadRaw<Homography>('homography');
+// v2: pinch thresholds were retuned after the first live test, so older saved values are dropped
+let settings: Settings = load('settings-v2', DEFAULT_SETTINGS);
+// v2: calibrations made with the old perspective fit are discarded (they could flip ink)
+let H: Homography | null = loadRaw<Homography>('homography-v2');
 
 const pinch = new PinchDetector();
 const filter = new PointFilter();
@@ -58,6 +61,7 @@ type Level = 'idle' | 'ready' | 'live' | 'guide' | 'problem';
 let trackerState: 'loading' | 'ready' | 'failed' = 'loading';
 let cameraProblem: string | null = null;
 let live = { hand: false, down: false, palm: 0 };
+let handAtEdgeAt = -Infinity;
 const CORNER_NAMES = ['Top left', 'Top right', 'Bottom right', 'Bottom left'];
 
 function setText(el: HTMLElement, text: string) {
@@ -75,7 +79,7 @@ function renderStatus() {
     [word, detail, level] = ['No camera', cameraProblem, 'problem'];
   } else if (calibration.active) {
     word = CORNER_NAMES[calibration.step!];
-    detail = `Point at the ${word.toLowerCase()} target on the wall, then pinch and hold for half a second. Corner ${calibration.step! + 1} of 4. Q or Esc cancels.`;
+    detail = `Move your hand to the ${word.toLowerCase()} corner of the area you’ll write in, then pinch and hold for half a second. Corner ${calibration.step! + 1} of 4. Q or Esc cancels.`;
     level = 'guide';
   } else if (live.hand && live.palm > 0.05) {
     [word, detail, level] = ['Wiping', 'Keep your palm open to clear the wall.', 'guide'];
@@ -83,6 +87,8 @@ function renderStatus() {
     [word, detail, level] = ['Writing', setupSentence(), 'live'];
   } else if (live.hand) {
     [word, detail, level] = ['Ready', `Pinch to write. ${setupSentence()}`, 'ready'];
+  } else if (performance.now() - handAtEdgeAt < 600) {
+    [word, detail, level] = ['Out of frame', 'Your hand is at the edge of the tracking camera’s view. Keep it inside the frame, or move the camera back or tilt it.', 'problem'];
   } else {
     [word, detail, level] = ['No hand', 'Raise your writing hand where the tracking camera can see it.', 'idle'];
   }
@@ -102,7 +108,7 @@ function setupSentence() {
 function applySettings() {
   pinch.setDownThreshold(settings.pinchDown);
   filter.setSmoothing(settings.smoothing);
-  save('settings', settings);
+  save('settings-v2', settings);
   channel.send({ type: 'settings', settings });
 }
 
@@ -148,7 +154,7 @@ function renderCalibStatus(note?: string) {
     el.textContent = note;
     el.classList.add('bad');
   } else if (H) {
-    el.textContent = 'Calibrated. Ink lands where you point.';
+    el.textContent = 'Calibrated to your writing area.';
     el.classList.add('good');
   } else {
     el.textContent = 'Not calibrated, so ink is drawn big in front of you.';
@@ -173,10 +179,11 @@ function cancelCalibration() {
 
 function onCalibEvent(ev: ReturnType<Calibration['update']>) {
   if (!ev) return;
+  diag({ k: 'calib', ev: ev.kind, step: 'step' in ev ? ev.step : null, H: 'H' in ev ? ev.H : null, pts: (calibration as any).captured });
   if (ev.kind !== 'captured') needsRelease = true;
   if (ev.kind === 'done') {
     H = ev.H;
-    save('homography', H);
+    save('homography-v2', H);
     filter.reset();
     renderCalibStatus();
   } else if (ev.kind === 'failed') {
@@ -190,7 +197,7 @@ function onCalibEvent(ev: ReturnType<Calibration['update']>) {
 $('calibrate').addEventListener('click', startCalibration);
 $('reset-calib').addEventListener('click', () => {
   H = null;
-  save('homography', null);
+  save('homography-v2', null);
   renderCalibStatus();
 });
 $('clear').addEventListener('click', () => channel.send({ type: 'clear' }));
@@ -340,6 +347,7 @@ async function startCamera(deviceId?: string, remember = false): Promise<boolean
     await video.play().catch(() => {});
     cameraMsg.textContent = '';
     cameraProblem = null;
+    diag({ k: 'camera', label: track.label, settings: track.getSettings() });
     resetTracking();
     syncCameraSelect();
     if (remember && track.getSettings().deviceId) save('camera', { id: track.getSettings().deviceId });
@@ -428,8 +436,11 @@ function processFrame() {
   const img = res.landmarks[0];
   const world = res.worldLandmarks[0];
   const now = performance.now();
+  // a hand cut off by the frame edge gives garbage readings: treat it as no hand
+  const inFrame = !!img && handInFrame(img);
+  if (img && !inFrame) handAtEdgeAt = now;
 
-  if (img && world) {
+  if (img && world && inFrame) {
     lastHandAt = now;
     handGone = false;
     const ratio = pinchRatio(world);
@@ -437,11 +448,15 @@ function processFrame() {
     const raw = penPoint(img);
     if (!down) needsRelease = false;
 
+    const handPx = Math.hypot(img[0].x - img[9].x, (img[0].y - img[9].y) * (video.videoHeight / video.videoWidth || 0.5625));
+    const w0 = calibration.active ? null : cameraToWall(raw, H, settings.mirror);
+    diag({ k: 'f', lm: img.map((p) => [Math.round(p.x * 1000), Math.round(p.y * 1000)]), ratio: r4(ratio), down, raw: pt(raw), wall: pt(w0), hand: r4(handPx), score: r4(res.handedness[0]?.[0]?.score ?? 0), cal: calibration.step, nr: needsRelease });
+
     if (calibration.active) {
       onCalibEvent(calibration.update(raw, down, now));
       sendPen(lastPen.x, lastPen.y, false, false);
     } else {
-      const w = cameraToWall(raw, H, settings.mirror);
+      const w = w0;
       if (!w) {
         // outside what the calibration can map (behind the camera's horizon): treat as out of view
         sendPen(lastPen.x, lastPen.y, false, false);
@@ -466,6 +481,7 @@ function processFrame() {
     palm.update(false, now);
     // a one-frame dropout shouldn't break the stroke: say nothing during the grace period
     // (the wall holds the last state), then tell the wall the hand is gone
+    diag({ k: img ? 'edge' : 'none', raw: img ? pt(penPoint(img)) : null });
     if (now - lastHandAt > HAND_LOST_MS) handLost(now);
     drawOverlay(null, false);
     updateReadout(false, false, 1, 0, 0);
@@ -580,6 +596,7 @@ setInterval(() => {
 // ---------------------------------------------------------------- start
 
 async function init() {
+  diag({ k: 'start', H, settings, video: [video.videoWidth, video.videoHeight] });
   const cameraReady = initCamera();
   try {
     tracker = await createHandTracker('VIDEO');

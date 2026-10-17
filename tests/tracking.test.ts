@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyHomography, computeHomography, isUsableQuad } from '../src/tracking/homography';
 import { OneEuroFilter, PointFilter } from '../src/tracking/oneEuro';
-import { isOpenPalm, PalmHold, PinchDetector, pinchRatio, type Lm } from '../src/tracking/gestures';
+import { handInFrame, isOpenPalm, PalmHold, PinchDetector, pinchRatio, type Lm } from '../src/tracking/gestures';
 import { CALIB_CORNERS, cameraToWall, defaultMap } from '../src/tracking/mapping';
 import { addPoint, trimTail, type Stroke } from '../src/wall/strokes';
 
@@ -178,6 +178,50 @@ describe('pinch detection', () => {
     fresh.setDownThreshold(0.3);
     for (let i = 0; i < 5; i++) fresh.update(0.4);
     expect(fresh.down).toBe(false);
+  });
+});
+
+describe('pinch thresholds on real recorded readings', () => {
+  // finger-gap ratios recorded from Ishan's hand (logs/diag.jsonl, first live test)
+  const held = [0.28, 0.31, 0.33, 0.29, 0.36, 0.4, 0.37, 0.33];
+  const circling = [0.41, 0.45, 0.48, 0.51, 0.47, 0.44, 0.49, 0.5];
+  const open = [0.68, 0.72, 0.95, 1.2];
+
+  it('a held pinch and a pinch moving through a circle stay down the whole time', () => {
+    const d = new PinchDetector();
+    const states = [...held, ...circling].map((r) => d.update(r));
+    // down after the two-frame debounce, and never lifts mid-stroke
+    expect(states.slice(2).every(Boolean)).toBe(true);
+  });
+
+  it('opening the hand lifts the pen', () => {
+    const d = new PinchDetector();
+    [...held, ...open].forEach((r) => d.update(r));
+    expect(d.down).toBe(false);
+  });
+
+  it('a relaxed, half-open hand moving around does not start writing', () => {
+    // recorded while moving between strokes without pinching
+    const relaxed = [0.46, 0.55, 0.62, 0.53, 0.41, 0.56, 0.48, 0.65];
+    const d = new PinchDetector();
+    expect(relaxed.map((r) => d.update(r)).some(Boolean)).toBe(false);
+  });
+});
+
+describe('hand at the frame edge', () => {
+  const at = (x: number, y: number) => Array.from({ length: 21 }, (_, i) => ({ x: x + (i % 5) * 0.01, y: y + Math.floor(i / 5) * 0.01, z: 0 }));
+
+  it('accepts a hand well inside the frame', () => {
+    expect(handInFrame(at(0.4, 0.5))).toBe(true);
+  });
+
+  it('rejects a hand cut off by the bottom edge (recorded while writing "Hello")', () => {
+    expect(handInFrame(at(0.45, 0.97))).toBe(false);
+  });
+
+  it('rejects a hand cut off by a side edge', () => {
+    expect(handInFrame(at(-0.02, 0.5))).toBe(false);
+    expect(handInFrame(at(0.97, 0.5))).toBe(false);
   });
 });
 

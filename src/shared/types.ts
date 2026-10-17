@@ -23,7 +23,7 @@ export const DEFAULT_SETTINGS: Settings = {
   smoothing: 0.5,
   thickness: 1,
   sparks: 1,
-  pinchDown: 0.3,
+  pinchDown: 0.38,
   mirror: true,
   palmWipe: true,
 };

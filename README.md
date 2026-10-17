@@ -51,13 +51,16 @@ Turn the room lights down so only the ink shows on the wall. **But the tracking 
 
 Stand where you'll stand for the shot. Press **C**. The wall shows four targets one at a time:
 
-> point at the glowing target → **pinch and hold for about half a second** → release → next target
+> move your hand to that corner of the area you'll write in → **pinch and hold for about half a second** → release → next corner
 
-Order: top-left, top-right, bottom-right, bottom-left. After the fourth, the control view says **Calibrated: ink lands where you point**. The calibration is saved, so you only redo it if you, the camera or the projector moves.
+Move your whole hand, don't just point from where you stand: the app maps how far your hand travels in front of the camera onto the wall. Make the area about as big as you'll write, and keep your hand inside the tracking camera's view the whole time.
+
+Order: top-left, top-right, bottom-right, bottom-left. After the fourth, the control view says **Calibrated**. The calibration is saved, so you only redo it if you, the camera or the projector moves.
 
 - **Space** captures the current corner without pinching (if a pinch isn't registering).
 - **Q** (or Esc on the laptop) cancels. On the full-screen wall use Q, because Esc there exits full screen. **Forget calibration** goes back to the default "draw big in front of you" mode.
-- If it says the points didn't form a clean rectangle, you probably pointed at a corner out of order. Just press C again.
+- If it says your hand barely moved, make the corners further apart and press C again.
+- If it says the corners came out of order, press C and go top left, top right, bottom right, bottom left.
 
 ### 6. Do a test word, then shoot
 
