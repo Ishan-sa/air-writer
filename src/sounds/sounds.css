@@ -1,0 +1,21 @@
+body { display: block; }
+.board { max-width: 720px; margin: 0 auto; padding: 40px 24px 60px; }
+.board h1 { margin: 0; font-size: clamp(48px, 9vw, 96px); font-weight: 800; font-stretch: 125%; line-height: 0.95; color: var(--text); }
+.lede { color: var(--dim); font-size: 17px; margin: 14px 0 28px; max-width: 52ch; }
+.sounds { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.sounds button {
+  display: flex; flex-direction: column; gap: 4px; text-align: left;
+  font: 600 18px/1.2 var(--font); font-stretch: 112%; color: var(--text);
+  background: var(--hush); border: 1px solid transparent; border-radius: 3px; padding: 16px; cursor: pointer;
+}
+.sounds button span { font-weight: 400; font-size: 14px; font-stretch: 100%; color: var(--dim); }
+.sounds button:hover { border-color: var(--rule); }
+.sounds button:active { transform: translateY(1px); }
+.pad {
+  margin-top: 18px; height: 200px; display: grid; place-content: center;
+  border: 1px dashed var(--rule); border-radius: 3px; color: var(--dim);
+  user-select: none; touch-action: none; cursor: crosshair;
+}
+.pad.down { border-style: solid; border-color: var(--glow); color: var(--glow); }
+.vol { display: flex; align-items: center; gap: 12px; margin-top: 18px; color: var(--dim); font-size: 14px; }
+.vol input { width: 200px; }

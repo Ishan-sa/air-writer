@@ -31,6 +31,7 @@ export default defineConfig({
       input: {
         control: resolve(__dirname, 'index.html'),
         wall: resolve(__dirname, 'wall.html'),
+        sounds: resolve(__dirname, 'sounds.html'),
       },
     },
   },

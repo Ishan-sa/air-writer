@@ -72,6 +72,12 @@ Order: top-left, top-right, bottom-right, bottom-left. After the fourth, the con
 
 Write "Hello World" once, check it on the filming iPhone, adjust, then roll.
 
+## Sound
+
+The wall plays Iron Man–style sound effects: a repulsor charge when you pinch, an electric hum with spark crackle that follows your hand speed while you write, a power-down when you let go, a whoosh when you wipe, and blips during calibration. They're synthesized in the browser, so there are no sound files.
+
+Browsers only allow sound after you interact with a page, so **click the wall window once** (or press any key there) and it says *Sound on*. Set the volume, or turn sound off, with **Sound effects** under Tuning. To audition every sound, open `/sounds.html`.
+
 ## Light and dark
 
 The control view starts in **Dark**: dim darkroom reds that won't light up your scene or spill into the shot. Switch to **Light** while setting up with the room lights on, or pick **Auto** to follow your Mac's appearance. The switch sits at the bottom of the side panel, and **T** cycles through the three. The wall view is always black, because that's what the projector shows as "no light".

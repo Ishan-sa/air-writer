@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Air Writer · Sounds</title>
+  </head>
+  <body>
+    <main class="board">
+      <h1>Sounds</h1>
+      <p class="lede">Every sound the wall makes. Tap one to hear it, or drag across the pad to hear writing.</p>
+      <div class="sounds">
+        <button data-sound="penDown">Pen down<span>the repulsor charge when you pinch</span></button>
+        <button data-sound="penUp">Pen up<span>power-down when you let go</span></button>
+        <button data-sound="wipe">Wipe<span>clearing the wall</span></button>
+        <button data-sound="blip">Corner<span>each calibration corner</span></button>
+        <button data-sound="chime">Calibrated<span>after the fourth corner</span></button>
+      </div>
+      <div id="pad" class="pad">Press and drag here to write</div>
+      <label class="vol">Volume <input id="vol" type="range" min="0" max="1" step="0.05" value="0.7" /></label>
+    </main>
+    <script type="module" src="/src/sounds/main.ts"></script>
+  </body>
+</html>

@@ -112,7 +112,7 @@ function applySettings() {
   channel.send({ type: 'settings', settings });
 }
 
-function bindSlider(id: string, key: 'smoothing' | 'thickness' | 'sparks' | 'pinchDown', fmt: (v: number) => string) {
+function bindSlider(id: string, key: 'smoothing' | 'thickness' | 'sparks' | 'pinchDown' | 'sfx', fmt: (v: number) => string) {
   const input = $<HTMLInputElement>(id);
   const out = input.parentElement!.querySelector('output')!;
   input.value = String(settings[key]);
@@ -130,6 +130,7 @@ bindSlider('s-thickness', 'thickness', times);
 bindSlider('s-sparks', 'sparks', times);
 // higher sensitivity = pen goes down with fingers further apart
 bindSlider('s-pinch', 'pinchDown', (v) => v.toFixed(2));
+bindSlider('s-sfx', 'sfx', (v) => (v === 0 ? 'off' : pct(v)));
 
 function bindCheck(id: string, key: 'mirror' | 'palmWipe') {
   const input = $<HTMLInputElement>(id);

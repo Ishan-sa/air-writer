@@ -17,6 +17,8 @@ export interface Settings {
   mirror: boolean;
   /** Allow the open-palm gesture to wipe the wall. */
   palmWipe: boolean;
+  /** Sound effects volume, 0 (off) to 1. */
+  sfx: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -26,6 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pinchDown: 0.38,
   mirror: true,
   palmWipe: true,
+  sfx: 0.7,
 };
 
 /** Messages between the control window (tracking) and the wall window (rendering). */

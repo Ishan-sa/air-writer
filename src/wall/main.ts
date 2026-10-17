@@ -2,6 +2,7 @@ import { openChannel } from '../shared/channel';
 import { DEFAULT_SETTINGS, type Msg, type Settings, type WallPoint } from '../shared/types';
 import { drawHotTail, drawStroke } from './ink';
 import { Sparks } from './sparks';
+import { Sfx } from './sfx';
 import { addPoint, trimTail, type Stroke } from './strokes';
 
 const canvas = document.getElementById('wall') as HTMLCanvasElement;
@@ -32,6 +33,34 @@ let dotAlpha = 0;
 let calib: { step: number | null; corners: WallPoint[] } = { step: null, corners: [] };
 let mouseMode = false;
 const sparks = new Sparks();
+
+// Browsers only allow audio after the viewer interacts with the page, so the
+// sound engine starts on the first click or key press in the wall window.
+let sfx: Sfx | null = null;
+let soundDown = false; // pen state as last heard, so a split stroke doesn't replay the charge
+function ensureAudio() {
+  if (sfx) return;
+  try {
+    sfx = new Sfx(new AudioContext(), settings.sfx);
+    toast('Sound on');
+  } catch {
+    /* no audio available: stay silent */
+  }
+}
+['pointerdown', 'keydown'].forEach((ev) => window.addEventListener(ev, ensureAudio, { capture: true }));
+
+function penSound(down: boolean) {
+  if (down === soundDown) return;
+  soundDown = down;
+  if (!sfx) return;
+  if (down) {
+    sfx.penDown();
+    sfx.startHum();
+  } else {
+    sfx.stopHum();
+    sfx.penUp();
+  }
+}
 
 // ---------------------------------------------------------------- sizing
 
@@ -87,9 +116,11 @@ function penInput(x: number, y: number, down: boolean, visible: boolean, t: numb
   const jumped = Math.hypot(x - pen.x, y - pen.y) > MAX_JUMP;
   pen = { x, y, down: down && visible, visible, at: performance.now() };
   if (calib.step !== null) {
+    penSound(false);
     endStroke(t);
     return;
   }
+  penSound(pen.down);
   if (pen.down) {
     if (wipeStart !== null) finishWipe();
     if (live && jumped) {
@@ -114,6 +145,7 @@ function endStroke(upAt?: number) {
 function clearWall() {
   endStroke();
   if (strokes.length === 0) return;
+  sfx?.wipe();
   wipeStart = performance.now();
 }
 
@@ -146,11 +178,14 @@ const channel = openChannel((msg: Msg) => {
       undo();
       break;
     case 'calib':
+      if (msg.step !== null && msg.step !== calib.step) sfx?.blip();
+      else if (msg.step === null && calib.step === 3) sfx?.chime();
       calib = { step: msg.step, corners: msg.corners };
       break;
     case 'settings': {
       const thicknessChanged = msg.settings.thickness !== settings.thickness;
       settings = msg.settings;
+      if (sfx) sfx.volume = settings.sfx;
       if (thicknessChanged) rebake();
       break;
     }
@@ -161,9 +196,17 @@ const channel = openChannel((msg: Msg) => {
 
 let lastFrame = performance.now();
 
+let lastSoundPos = { x: 0.5, y: 0.5 };
+
 function frame(now: number) {
   const dt = Math.min((now - lastFrame) / 1000, 0.05);
   lastFrame = now;
+
+  // the writing hum follows how fast the pen moves across the wall
+  if (sfx && pen.down && dt > 0) {
+    sfx.writing(Math.hypot(pen.x - lastSoundPos.x, pen.y - lastSoundPos.y) / dt, dt);
+  }
+  lastSoundPos = { x: pen.x, y: pen.y };
 
   if (now - pen.at > PEN_STALE_MS && !mouseMode) {
     if (pen.visible || pen.down) penInput(pen.x, pen.y, false, false, now);
@@ -339,7 +382,7 @@ resize();
 showCursor();
 channel.send({ type: 'hello' });
 setInterval(() => channel.send({ type: 'hello' }), 2000); // heartbeat so the control view knows the wall is open
-toast('Air Writer wall\nDouble-click or press F for full screen  ·  M for mouse test mode  ·  Q cancels calibration', 4000);
+toast('Air Writer wall\nClick once to turn on sound  ·  F or double-click for full screen  ·  M mouse test mode  ·  Q cancels calibration', 4000);
 requestAnimationFrame(frame);
 
 // for debugging from the console
