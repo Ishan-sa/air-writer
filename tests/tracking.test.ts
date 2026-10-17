@@ -3,7 +3,7 @@ import { applyHomography, computeHomography, isUsableQuad } from '../src/trackin
 import { OneEuroFilter, PointFilter } from '../src/tracking/oneEuro';
 import { handInFrame, isOpenPalm, PalmHold, PinchDetector, pinchRatio, type Lm } from '../src/tracking/gestures';
 import { CALIB_CORNERS, cameraToWall, defaultMap } from '../src/tracking/mapping';
-import { addPoint, trimTail, type Stroke } from '../src/wall/strokes';
+import { addPoint, smoothStroke, trimTail, type Stroke } from '../src/wall/strokes';
 
 const close = (a: number, b: number, eps = 1e-6) => expect(Math.abs(a - b)).toBeLessThan(eps);
 
@@ -279,3 +279,40 @@ describe('strokes', () => {
     expect(trimTail(s, 70, 400)).toHaveLength(10);
   });
 });
+
+describe('stroke smoothing', () => {
+  // ~6 wall px of zig-zag wobble on a 1920 px wall: what the recorded strokes showed
+  const wobble = 6 / 1920;
+
+  it('takes most of the wobble out of a shaky straight line', () => {
+    const shaky: Stroke = Array.from({ length: 60 }, (_, i) => ({ x: 0.2 + i * 0.008, y: 0.5 + (i % 2 ? wobble : -wobble), t: i * 17 }));
+    const smooth = smoothStroke(shaky);
+    const dev = (s: Stroke) => Math.max(...s.slice(5, -5).map((p) => Math.abs(p.y - 0.5)));
+    expect(dev(smooth)).toBeLessThan(dev(shaky) * 0.3);
+  });
+
+  it('keeps both ends exactly where they were (the pen tip never lags)', () => {
+    const s: Stroke = Array.from({ length: 30 }, (_, i) => ({ x: i * 0.01, y: Math.sin(i) * 0.01, t: i * 17 }));
+    const out = smoothStroke(s);
+    expect(out[0]).toEqual(s[0]);
+    expect(out.at(-1)).toEqual(s.at(-1));
+    expect(out).toHaveLength(s.length);
+  });
+
+  it('keeps the shape of a letter: a circle barely shrinks', () => {
+    const r = 0.05;
+    const circle: Stroke = Array.from({ length: 80 }, (_, i) => {
+      const a = (i / 79) * Math.PI * 2;
+      return { x: 0.5 + r * Math.cos(a), y: 0.5 + r * Math.sin(a), t: i * 17 };
+    });
+    const out = smoothStroke(circle);
+    const radii = out.slice(5, -5).map((p) => Math.hypot(p.x - 0.5, p.y - 0.5));
+    expect(Math.min(...radii)).toBeGreaterThan(r * 0.97);
+  });
+
+  it('leaves short strokes alone', () => {
+    const s: Stroke = [{ x: 0, y: 0, t: 0 }, { x: 0.01, y: 0.01, t: 17 }];
+    expect(smoothStroke(s)).toEqual(s);
+  });
+});
+

@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, type Msg, type Settings, type WallPoint } from '../sh
 import { drawHotTail, drawStroke } from './ink';
 import { Sparks } from './sparks';
 import { Sfx } from './sfx';
-import { addPoint, trimTail, type Stroke } from './strokes';
+import { addPoint, smoothStroke, trimTail, type Stroke } from './strokes';
 
 const canvas = document.getElementById('wall') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -94,7 +94,7 @@ function rebake() {
 /** Renders a finished stroke via the scratch layer and adds it to the baked ink. */
 function bake(s: Stroke) {
   lctx.clearRect(0, 0, W, H);
-  drawStroke(lctx, s, W, H, settings.thickness);
+  drawStroke(lctx, smoothStroke(s), W, H, settings.thickness);
   bctx.save();
   bctx.globalCompositeOperation = 'lighter';
   bctx.drawImage(liveLayer, 0, 0);
@@ -239,8 +239,9 @@ function frame(now: number) {
   // live stroke
   if (live && live.length) {
     lctx.clearRect(0, 0, W, H);
-    drawStroke(lctx, live, W, H, settings.thickness);
-    drawHotTail(lctx, live, W, H, settings.thickness, now);
+    const shaped = smoothStroke(live);
+    drawStroke(lctx, shaped, W, H, settings.thickness);
+    drawHotTail(lctx, shaped, W, H, settings.thickness, now);
     ctx.globalCompositeOperation = 'lighter';
     ctx.drawImage(liveLayer, 0, 0);
     ctx.globalCompositeOperation = 'source-over';

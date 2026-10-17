@@ -61,6 +61,7 @@ let trackerState: 'loading' | 'ready' | 'failed' = 'loading';
 let cameraProblem: string | null = null;
 let live = { hand: false, down: false, start: 0 };
 let handAtEdgeAt = -Infinity;
+let handSize = 0; // wrist-to-knuckle length as a fraction of frame width, smoothed
 const CORNER_NAMES = ['Top left', 'Top right', 'Bottom right', 'Bottom left'];
 
 function setText(el: HTMLElement, text: string) {
@@ -102,6 +103,8 @@ function renderStatus() {
 
 function setupSentence() {
   if (!wallConnected()) return 'The wall window isn’t open yet. Press W.';
+  // measured: a hand under ~4% of the frame width tracks noticeably shakier
+  if (handSize && handSize < 0.04) return 'Your hand is small in the camera frame, so lines will be shaky. Move the tracking camera closer to you.';
   return H ? 'The wall is open and calibrated.' : 'The wall is open. Press C to calibrate.';
 }
 
@@ -332,8 +335,9 @@ async function startCamera(deviceId?: string, remember = false): Promise<boolean
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         deviceId: deviceId ? { exact: deviceId } : undefined,
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+        // full HD gives the tracker ~50% more pixels on a hand that's small in the frame
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
         frameRate: { ideal: 60 },
       },
       audio: false,
@@ -450,6 +454,7 @@ function processFrame() {
     const raw = penPoint(img);
 
     const handPx = Math.hypot(img[0].x - img[9].x, (img[0].y - img[9].y) * (video.videoHeight / video.videoWidth || 0.5625));
+    handSize = handSize ? handSize * 0.97 + handPx * 0.03 : handPx;
     const w0 = calibration.active ? null : cameraToWall(raw, H, settings.mirror);
     diag({ k: 'f', lm: img.map((p) => [Math.round(p.x * 1000), Math.round(p.y * 1000)]), ratio: r4(ratio), down, raw: pt(raw), wall: pt(w0), hand: r4(handPx), score: r4(res.handedness[0]?.[0]?.score ?? 0), cal: calibration.step, armed: session.armed });
 
