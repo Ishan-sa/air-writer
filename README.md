@@ -67,6 +67,10 @@ Order: top-left, top-right, bottom-right, bottom-left. After the fourth, the con
 
 Write "Hello World" once, check it on the filming iPhone, adjust, then roll.
 
+## Light and dark
+
+The control view starts in **Dark**: dim darkroom reds that won't light up your scene or spill into the shot. Switch to **Light** while setting up with the room lights on, or pick **Auto** to follow your Mac's appearance. The switch sits at the bottom of the side panel, and **T** cycles through the three. The wall view is always black, because that's what the projector shows as "no light".
+
 ## Tuning (control view → Tuning)
 
 | Slider | Turn it **up** if… | Turn it **down** if… |
@@ -91,6 +95,7 @@ The **Pinch** bar shows how closed your fingers are, and the white mark is where
 | Key | Where | What |
 |---|---|---|
 | W | control | open the wall window |
+| T | control | switch between dark, light and auto |
 | C | either | calibrate |
 | Space | control | capture current corner (during calibration) |
 | Q / Esc | either | cancel calibration (use Q on the full-screen wall) |

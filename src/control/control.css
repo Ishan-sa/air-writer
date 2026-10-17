@@ -2,6 +2,9 @@
  * Safelight. The laptop sits in a dark room while Ishan films, so the screen
  * must not light the scene: everything is drawn in dim darkroom reds, and the
  * one loud element is the status word he reads from across the room.
+ *
+ * Daylight (light mode) is the same room with the lights on, for setting up:
+ * pale ground, oxblood text, same red identity.
  */
 @import '@fontsource-variable/archivo/wdth.css';
 
@@ -12,7 +15,52 @@
   --text: #d9806c; /* body text, warm and low-luminance */
   --glow: #ff5436; /* live states only: writing, active targets */
   --hush: #2a0f0b; /* button and track fills */
+  --main-hover: #e8907c;
+  --feed-filter: grayscale(1) contrast(1.2) brightness(0.3) sepia(1) hue-rotate(-45deg) saturate(3.5) brightness(0.85); /* safelight: tints only the video pixels */
+  --live-shadow: 0 0 28px rgba(255, 84, 54, 0.35);
+  --stage: #000;
+  /* hand skeleton drawn over the feed */
+  --bone: rgba(255, 130, 105, 0.7);
+  --joint: #ffb3a1;
+  --pen: #ff5436;
   --font: 'Archivo Variable', 'Archivo', system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+/* Daylight: chosen explicitly, or following the system when no choice is saved */
+:root[data-theme='light'] {
+  --ground: #f6f2f1;
+  --rule: #e3d2ce;
+  --dim: #8f4535;
+  --text: #3d130c;
+  --glow: #cf2a0f;
+  --hush: #ede1de;
+  --main-hover: #5a1d13;
+  --feed-filter: grayscale(1) contrast(1.1) brightness(0.85) sepia(1) hue-rotate(-42deg) saturate(3.2);
+  --bone: rgba(61, 19, 12, 0.85);
+  --joint: #3d130c;
+  --pen: #cf2a0f;
+  --live-shadow: none;
+  --stage: #ebdfdc;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --ground: #f6f2f1;
+    --rule: #e3d2ce;
+    --dim: #8f4535;
+    --text: #3d130c;
+    --glow: #cf2a0f;
+    --hush: #ede1de;
+    --main-hover: #5a1d13;
+    --feed-filter: grayscale(1) contrast(1.1) brightness(0.85) sepia(1) hue-rotate(-42deg) saturate(3.2);
+  --bone: rgba(61, 19, 12, 0.85);
+  --joint: #3d130c;
+  --pen: #cf2a0f;
+    --live-shadow: none;
+    --stage: #ebdfdc;
+    color-scheme: light;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -49,7 +97,7 @@ body {
 .state[data-level='ready'] { color: var(--text); }
 .state[data-level='live'] {
   color: var(--glow);
-  text-shadow: 0 0 28px rgba(255, 84, 54, 0.35);
+  text-shadow: var(--live-shadow);
 }
 .state[data-level='guide'] { color: var(--glow); }
 .state[data-level='problem'] { color: var(--text); font-stretch: 100%; }
@@ -83,26 +131,17 @@ main {
   position: relative;
   aspect-ratio: 16 / 9;
   max-height: calc(100vh - 290px);
-  background: #000;
+  background: var(--stage);
   overflow: hidden;
   border-radius: 2px;
 }
-/* the feed is shown as if under a safelight: monochrome, then multiplied red */
 .stage video {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: grayscale(1) contrast(1.15) brightness(0.85);
-}
-.stage::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: #b3200f;
-  mix-blend-mode: multiply;
-  pointer-events: none;
+  filter: var(--feed-filter);
 }
 .stage canvas {
   position: absolute;
@@ -195,8 +234,8 @@ select option { background: var(--ground); color: var(--text); }
   color: var(--ground);
   background: var(--text);
 }
-.act-main:hover { background: #e8907c; border-color: transparent; }
-.act-main kbd { color: var(--ground); border-color: rgba(18, 6, 5, 0.35); }
+.act-main:hover { background: var(--main-hover); border-color: transparent; }
+.act-main kbd { color: var(--ground); border-color: color-mix(in srgb, var(--ground) 40%, transparent); }
 .act-wall { border-color: var(--rule); background: transparent; }
 .act-wall:hover { background: var(--hush); }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -276,6 +315,20 @@ input[type='checkbox'] {
 input[type='checkbox']:checked { background: var(--text); border-color: var(--text); box-shadow: inset 0 0 0 2px var(--ground); }
 
 .keys { margin: auto 0 0; font-size: 13px; line-height: 1.9; color: var(--dim); }
+
+/* theme switch: three plain choices, the current one filled */
+.theme { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--dim); }
+.theme-options { display: flex; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
+.theme-options button {
+  font: inherit;
+  color: var(--dim);
+  background: transparent;
+  border: 0;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.theme-options button + button { border-left: 1px solid var(--rule); }
+.theme-options button[aria-pressed='true'] { color: var(--ground); background: var(--text); }
 
 /* focus that stays visible in the dark */
 :focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }

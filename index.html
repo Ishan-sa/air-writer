@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Air Writer</title>
+    <script>
+      // apply the saved theme before first paint so there's no flash of the wrong one
+      try {
+        const t = JSON.parse(localStorage.getItem('air-writer:theme') || 'null');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
   </head>
   <body>
     <!-- The one big thing: readable from across a dark room while standing at the wall. -->
@@ -69,6 +76,16 @@
           <label class="check"><input id="s-palm" type="checkbox" /><span>Open palm wipes the wall</span></label>
           <label class="check"><input id="s-mirror" type="checkbox" /><span>Mirror the camera (only matters before calibrating)</span></label>
         </details>
+
+        <div class="theme">
+          <span id="theme-label">Theme</span>
+          <div class="theme-options" role="group" aria-labelledby="theme-label">
+            <button data-theme-choice="dark">Dark</button>
+            <button data-theme-choice="light">Light</button>
+            <button data-theme-choice="auto" title="Follow your Mac’s light or dark appearance">Auto</button>
+          </div>
+          <kbd>T</kbd>
+        </div>
 
         <p class="keys">
           On the wall window: <kbd>F</kbd> full screen, <kbd>M</kbd> draw with the mouse, <kbd>Q</kbd> cancel calibrating.

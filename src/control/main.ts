@@ -230,6 +230,36 @@ async function placeWallOnProjector() {
 }
 $('open-wall').addEventListener('click', openWall);
 
+// ---------------------------------------------------------------- theme
+/** Skeleton colours come from the theme's CSS tokens; re-read whenever the theme changes. */
+let ink = readInk();
+function readInk() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
+  return { bone: v('--bone', 'rgba(255,130,105,0.7)'), joint: v('--joint', '#ffb3a1'), pen: v('--pen', '#ff5436') };
+}
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => (ink = readInk()));
+
+
+type Theme = 'dark' | 'light' | 'auto';
+const THEMES: Theme[] = ['dark', 'light', 'auto'];
+let theme: Theme = loadRaw<Theme>('theme') ?? 'auto';
+
+function applyTheme(next: Theme) {
+  theme = next;
+  if (theme === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  save('theme', theme);
+  ink = readInk();
+  document.querySelectorAll<HTMLButtonElement>('[data-theme-choice]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.themeChoice === theme));
+  });
+}
+document.querySelectorAll<HTMLButtonElement>('[data-theme-choice]').forEach((b) =>
+  b.addEventListener('click', () => applyTheme(b.dataset.themeChoice as Theme)),
+);
+applyTheme(theme);
+
 // ---------------------------------------------------------------- keys
 
 function handleKey(k: string) {
@@ -239,6 +269,7 @@ function handleKey(k: string) {
   else if (k === 'x' || k === 'backspace' || k === 'delete') channel.send({ type: 'clear' });
   else if (k === 'z') channel.send({ type: 'undo' });
   else if (k === 'w') openWall();
+  else if (k === 't') applyTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
 }
 
 window.addEventListener('keydown', (e) => {
@@ -473,6 +504,7 @@ setInterval(() => {
 
 let previewSize: { w: number; h: number } | null = null;
 
+
 function drawOverlay(img: { x: number; y: number }[] | null, down: boolean) {
   const vw = video.videoWidth || previewSize?.w || 1280, vh = video.videoHeight || previewSize?.h || 720;
   if (overlay.width !== vw || overlay.height !== vh) {
@@ -482,7 +514,7 @@ function drawOverlay(img: { x: number; y: number }[] | null, down: boolean) {
   octx.clearRect(0, 0, vw, vh);
   if (!img) return;
   octx.lineWidth = 3;
-  octx.strokeStyle = 'rgba(255, 130, 105, 0.7)';
+  octx.strokeStyle = ink.bone;
   for (const c of HandLandmarker.HAND_CONNECTIONS) {
     const a = img[c.start], b = img[c.end];
     octx.beginPath();
@@ -490,7 +522,7 @@ function drawOverlay(img: { x: number; y: number }[] | null, down: boolean) {
     octx.lineTo(b.x * vw, b.y * vh);
     octx.stroke();
   }
-  octx.fillStyle = '#ffb3a1';
+  octx.fillStyle = ink.joint;
   for (const p of img) {
     octx.beginPath();
     octx.arc(p.x * vw, p.y * vh, 4, 0, Math.PI * 2);
@@ -499,8 +531,8 @@ function drawOverlay(img: { x: number; y: number }[] | null, down: boolean) {
   const pen = penPoint(img as any);
   octx.beginPath();
   octx.arc(pen.x * vw, pen.y * vh, down ? 14 : 9, 0, Math.PI * 2);
-  octx.fillStyle = down ? '#ffe1d8' : 'rgba(255, 84, 54, 0.85)';
-  octx.shadowColor = '#ff5436';
+  octx.fillStyle = ink.pen;
+  octx.shadowColor = ink.pen;
   octx.shadowBlur = down ? 24 : 8;
   octx.fill();
   octx.shadowBlur = 0;
