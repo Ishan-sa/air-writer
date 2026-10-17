@@ -3,3 +3,4 @@ dist
 .superpowers/
 public/mediapipe/
 docs/screenshots/
+public/test/
