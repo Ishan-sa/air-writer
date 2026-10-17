@@ -2,7 +2,7 @@ import { openChannel } from '../shared/channel';
 import { load, loadRaw, save } from '../shared/storage';
 import { DEFAULT_SETTINGS, type Msg, type Settings } from '../shared/types';
 import { Calibration } from '../tracking/calibration';
-import { handInFrame, isHandOpen, isOpenPalm, penPoint, PinchDetector, pinchRatio } from '../tracking/gestures';
+import { flatPinchGap, handInFrame, isHandOpen, isOpenPalm, penPoint, PinchDetector, pinchRatio } from '../tracking/gestures';
 import { WriteSession } from '../tracking/session';
 import type { Homography } from '../tracking/homography';
 import { CALIB_CORNERS, cameraToWall } from '../tracking/mapping';
@@ -30,6 +30,9 @@ const calibration = new Calibration();
 let tracker: HandLandmarker | null = null;
 let lastHandAt = 0;
 const HAND_LOST_MS = 150;
+// while writing, fast strokes blur and the tracker can lose the hand for a few
+// frames (recorded gaps: p90 ~200 ms, max ~480 ms); bridge those instead of ending the stroke
+const HAND_LOST_WRITING_MS = 350;
 
 // ---------------------------------------------------------------- channel to the wall
 
@@ -59,7 +62,7 @@ setInterval(() => {
 type Level = 'idle' | 'ready' | 'live' | 'guide' | 'problem';
 let trackerState: 'loading' | 'ready' | 'failed' = 'loading';
 let cameraProblem: string | null = null;
-let live = { hand: false, down: false, start: 0 };
+let live = { hand: false, down: false, start: 0, wipe: 0 };
 let handAtEdgeAt = -Infinity;
 let handSize = 0; // wrist-to-knuckle length as a fraction of frame width, smoothed
 const CORNER_NAMES = ['Top left', 'Top right', 'Bottom right', 'Bottom left'];
@@ -81,10 +84,12 @@ function renderStatus() {
     word = CORNER_NAMES[calibration.step!];
     detail = `Move your hand to the ${word.toLowerCase()} corner of the area you’ll write in, then pinch and hold for half a second. Corner ${calibration.step! + 1} of 4. Q or Esc cancels.`;
     level = 'guide';
+  } else if (session.armed && live.hand && live.wipe > 0.05) {
+    [word, detail, level] = ['Wiping', 'Keep your palm up to clear the wall.', 'guide'];
   } else if (session.armed && live.hand && live.down) {
     [word, detail, level] = ['Writing', 'Open your fingers to lift the pen.', 'live'];
   } else if (session.armed) {
-    const wipe = settings.swipeWipe ? ' Swipe an open hand sideways to wipe.' : '';
+    const wipe = settings.swipeWipe ? ' Hold up an open palm, or swipe, to wipe.' : ' Hold up an open palm to wipe.';
     [word, detail, level] = ['Ready', `Pinch to write.${wipe} Lower your hand to stop. ${setupSentence()}`, 'ready'];
   } else if (live.hand && live.start > 0.05) {
     [word, detail, level] = ['Starting', 'Keep your palm open…', 'guide'];
@@ -112,6 +117,7 @@ function setupSentence() {
 
 function applySettings() {
   pinch.setDownThreshold(settings.pinchDown);
+  session.swipeEnabled = settings.swipeWipe;
   filter.setSmoothing(settings.smoothing);
   save('settings-v2', settings);
   channel.send({ type: 'settings', settings });
@@ -450,15 +456,17 @@ function processFrame() {
     lastHandAt = now;
     handGone = false;
     const ratio = pinchRatio(world);
-    const down = pinch.update(ratio);
+    const aspect = video.videoHeight / video.videoWidth || 0.5625;
+    const flatGap = flatPinchGap(img, aspect);
+    const down = pinch.update(ratio, flatGap);
     const raw = penPoint(img);
 
     const handPx = Math.hypot(img[0].x - img[9].x, (img[0].y - img[9].y) * (video.videoHeight / video.videoWidth || 0.5625));
     handSize = handSize ? handSize * 0.97 + handPx * 0.03 : handPx;
     const w0 = calibration.active ? null : cameraToWall(raw, H, settings.mirror);
-    diag({ k: 'f', lm: img.map((p) => [Math.round(p.x * 1000), Math.round(p.y * 1000)]), ratio: r4(ratio), down, raw: pt(raw), wall: pt(w0), hand: r4(handPx), score: r4(res.handedness[0]?.[0]?.score ?? 0), cal: calibration.step, armed: session.armed });
+    diag({ k: 'f', lm: img.map((p) => [Math.round(p.x * 1000), Math.round(p.y * 1000)]), ratio: r4(ratio), gap: r4(flatGap), down, raw: pt(raw), wall: pt(w0), hand: r4(handPx), score: r4(res.handedness[0]?.[0]?.score ?? 0), cal: calibration.step, armed: session.armed });
 
-    let startProgress = 0;
+    let startProgress = 0, wipeProgress = 0;
     if (calibration.active) {
       onCalibEvent(calibration.update(raw, down, now));
       sendPen(lastPen.x, lastPen.y, false, false);
@@ -466,6 +474,7 @@ function processFrame() {
       const out = session.update({ present: true, palm: isOpenPalm(world), open: isHandOpen(world), pinch: down, wristX: img[0].x }, now);
       onSessionEvent(out.event);
       startProgress = out.startProgress;
+      wipeProgress = out.wipeProgress;
       const w = w0;
       if (w) {
         const f = filter.filter(w.x, w.y, now / 1000);
@@ -475,13 +484,13 @@ function processFrame() {
       sendPen(lastPen.x, lastPen.y, out.penDown && !!w, out.visible && !!w);
     }
     drawOverlay(img, down);
-    updateReadout(true, down, ratio, startProgress, res.handedness[0]?.[0]?.score ?? 0);
+    updateReadout(true, down, ratio, startProgress, wipeProgress);
   } else {
     if (!calibration.active) onSessionEvent(session.update({ present: false, palm: false, open: false, pinch: false, wristX: 0 }, now).event);
     // a one-frame dropout shouldn't break the stroke: say nothing during the grace period
     // (the wall holds the last state), then tell the wall the hand is gone
     diag({ k: img ? 'edge' : 'none', raw: img ? pt(penPoint(img)) : null });
-    if (now - lastHandAt > HAND_LOST_MS) handLost(now);
+    if (now - lastHandAt > (pinch.down ? HAND_LOST_WRITING_MS : HAND_LOST_MS)) handLost(now);
     drawOverlay(null, false);
     updateReadout(false, false, 1, 0, 0);
   }
@@ -558,16 +567,16 @@ function onSessionEvent(event: 'start' | 'stop' | 'wipe' | undefined) {
   diag({ k: 'session', event });
   if (event === 'start') channel.send({ type: 'session', live: true });
   else if (event === 'stop') channel.send({ type: 'session', live: false });
-  else if (event === 'wipe' && settings.swipeWipe) channel.send({ type: 'clear' });
+  else if (event === 'wipe') channel.send({ type: 'clear' });
   renderStatus();
 }
 
-function updateReadout(hand: boolean, down: boolean, ratio: number, startProgress: number, _score: number) {
-  live = { hand, down, start: startProgress };
+function updateReadout(hand: boolean, down: boolean, ratio: number, startProgress: number, wipeProgress = 0) {
+  live = { hand, down, start: startProgress, wipe: wipeProgress };
   renderStatus();
   $('m-pinch').style.width = `${Math.max(0, Math.min(1, 1 - ratio / 1.2)) * 100}%`;
   $('m-pinch-mark').style.left = `${(1 - settings.pinchDown / 1.2) * 100}%`;
-  $('m-start').style.width = `${startProgress * 100}%`;
+  $('m-start').style.width = `${Math.max(startProgress, wipeProgress) * 100}%`;
 }
 
 // FPS + scene brightness (a dark scene means slow, blurry frames and lost tracking)
@@ -644,7 +653,7 @@ Object.assign(window, {
       trackerState = 'ready';
       wallSeenAt = performance.now() + 1e9;
       drawOverlay(hand.landmarks, down);
-      updateReadout(true, down, down ? 0.12 : 0.7, 0, 0.95);
+      updateReadout(true, down, down ? 0.12 : 0.7, 0, 0);
     },
     get settings() { return settings; },
     get homography() { return H; },

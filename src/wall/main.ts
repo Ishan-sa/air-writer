@@ -34,7 +34,8 @@ function isAccidental(s: Stroke) {
   const ms = s.length ? s[s.length - 1].t - s[0].t : 0;
   return len < 0.01 && ms < 200;
 }
-const PEN_STALE_MS = 300;
+// longer than the control view's 350 ms grace for tracking gaps while writing
+const PEN_STALE_MS = 500;
 
 interface Pen { x: number; y: number; down: boolean; visible: boolean; at: number }
 let pen: Pen = { x: 0.5, y: 0.5, down: false, visible: false, at: 0 };
@@ -106,6 +107,13 @@ function bake(s: Stroke) {
 
 /** A jump bigger than this in one frame (e.g. tracking hopping to the other hand) starts a new stroke. */
 const MAX_JUMP = 0.2;
+/**
+ * A pen lift shorter than this, landing back near where it lifted, continues
+ * the same stroke: fast strokes sometimes flicker open for a frame or two.
+ */
+const STITCH_MS = 150;
+const STITCH_DIST = 0.04;
+let lifted: { upAt: number } | null = null;
 
 /** `t` is this window's clock: stamped on arrival so it matches the render loop's clock. */
 function penInput(x: number, y: number, down: boolean, visible: boolean, t: number) {
@@ -128,16 +136,26 @@ function penInput(x: number, y: number, down: boolean, visible: boolean, t: numb
       endStroke(t);
       prevTip = null;
     }
+    if (live && lifted) {
+      const last = live[live.length - 1];
+      const near = Math.hypot(x - last.x, y - last.y) < STITCH_DIST;
+      if (t - lifted.upAt < STITCH_MS && near) lifted = null; // a flicker: keep going
+      else endStroke(lifted.upAt);
+    }
     if (!live) live = [];
     addPoint(live, { x, y, t });
-  } else {
+  } else if (!visible) {
     // pen up because the hand left view (lowered while still pinched): drop the
-    // tail it drew on the way down; a normal release only trims the finger drag
-    endStroke(t, visible ? RELEASE_TRIM_MS : LOSS_TRIM_MS);
+    // tail it drew on the way down
+    endStroke(lifted?.upAt ?? t, LOSS_TRIM_MS);
+  } else if (live && !lifted) {
+    // a normal release: wait a moment before finishing, in case it was a flicker
+    lifted = { upAt: t };
   }
 }
 
 function endStroke(upAt?: number, trimMs = RELEASE_TRIM_MS) {
+  lifted = null;
   if (!live) return;
   const done = trimTail(live, trimMs, upAt);
   live = null;
@@ -162,6 +180,7 @@ function finishWipe() {
 function undo() {
   if (live) {
     live = null;
+    lifted = null;
     return;
   }
   strokes.pop();
@@ -214,6 +233,7 @@ function frame(now: number) {
   lastFrame = now;
 
 
+  if (lifted && now - lifted.upAt >= STITCH_MS) endStroke(lifted.upAt);
   if (now - pen.at > PEN_STALE_MS && !mouseMode) {
     if (pen.visible || pen.down) penInput(pen.x, pen.y, false, false, now);
   }

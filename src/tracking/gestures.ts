@@ -43,8 +43,26 @@ export function handInFrame(img: { x: number; y: number }[], margin = 0.01): boo
 }
 
 /**
- * Pen up/down from the pinch ratio, with hysteresis (separate down/up
- * thresholds) and a short debounce so the pen doesn't flicker between letters.
+ * Thumb-tip to index-tip gap as seen flat on the camera image, relative to the
+ * index finger's first segment. Unlike the 3D reading it doesn't drift when
+ * the hand tilts, but fingertips that merely overlap on camera also read as
+ * closed, so it's only used to keep a pinch going, never to start one.
+ * `aspect` is the video's height / width.
+ */
+export function flatPinchGap(img: Lm[], aspect: number): number {
+  const d2 = (a: Lm, b: Lm) => Math.hypot(a.x - b.x, (a.y - b.y) * aspect);
+  return d2(img[THUMB_TIP], img[INDEX_TIP]) / Math.max(d2(img[INDEX_MCP], img[6]), 1e-6);
+}
+
+/** Flat gap above this means the fingertips have visibly separated (recorded pinch ~0.24-0.5, open 0.8+). */
+const FLAT_OPEN = 0.7;
+
+/**
+ * Pen up/down. Hard to start, hard to stop:
+ * - down needs the 3D pinch reading below `downAt` for 2 frames
+ * - up needs the 3D reading above `upAt` AND the flat gap open, for 3 frames
+ * A pinch moving fast often fools one measure for a moment (recorded: the 3D
+ * reading drifting to ~0.6 mid-stroke), which used to break strokes.
  */
 export class PinchDetector {
   down = false;
@@ -56,6 +74,7 @@ export class PinchDetector {
     public downAt = 0.38,
     public upAt = 0.57,
     public confirmFrames = 2,
+    public releaseFrames = 3,
   ) {}
 
   setDownThreshold(downAt: number) {
@@ -68,11 +87,13 @@ export class PinchDetector {
     this.pending = 0;
   }
 
-  update(ratio: number): boolean {
-    const wants = this.down ? ratio < this.upAt : ratio < this.downAt;
+  /** @param flatGap optional flatPinchGap reading; without it only the 3D ratio is used */
+  update(ratio: number, flatGap?: number): boolean {
+    const opened = ratio > this.upAt && (flatGap === undefined || flatGap > FLAT_OPEN);
+    const wants = this.down ? !opened : ratio < this.downAt;
     if (wants === this.down) {
       this.pending = 0;
-    } else if (++this.pending >= this.confirmFrames) {
+    } else if (++this.pending >= (this.down ? this.releaseFrames : this.confirmFrames)) {
       this.down = wants;
       this.pending = 0;
     }
@@ -101,15 +122,17 @@ export function isOpenPalm(world: Lm[]): boolean {
 }
 
 /**
- * Looser than isOpenPalm: fingers straight and not pinching, spread or not.
- * Used for the wipe swipe, where a fast-moving hand blurs and fingers close up.
+ * Looser than isOpenPalm: fingers straight, spread or not. Used for the wipe
+ * swipe, where a fast-moving hand blurs and fingers close up. (The pinch
+ * reading isn't checked: it drifts with hand angle, and the session already
+ * ignores swipes while pinching.)
  */
 export function isHandOpen(world: Lm[]): boolean {
   const wrist = world[WRIST];
   for (const f of FINGERS) {
     if (dist(wrist, world[f.tip]) < dist(wrist, world[f.pip]) * 1.1) return false;
   }
-  return pinchRatio(world) > 0.6;
+  return true;
 }
 
 /** Fires once after the palm has been held open for `holdMs` (brief dropouts tolerated). */

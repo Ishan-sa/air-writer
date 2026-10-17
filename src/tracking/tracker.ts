@@ -11,8 +11,10 @@ export async function createHandTracker(runningMode: 'VIDEO' | 'IMAGE' = 'VIDEO'
     runningMode,
     numHands: 1,
     minHandDetectionConfidence: 0.5,
-    minHandPresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+    // lower than the defaults so a fast, blurred hand stays tracked instead of
+    // dropping to a full re-detection (which struggles with a pinched hand)
+    minHandPresenceConfidence: 0.3,
+    minTrackingConfidence: 0.3,
   };
   try {
     return await HandLandmarker.createFromOptions(fileset, options);

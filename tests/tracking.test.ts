@@ -156,12 +156,13 @@ describe('pinch detection', () => {
     expect(pinchRatio(hand({ open: true }))).toBeGreaterThan(0.6);
   });
 
-  it('needs two frames to change state and ignores a one-frame blip', () => {
+  it('needs two frames to start, three to lift, and ignores short blips', () => {
     const d = new PinchDetector();
     expect(d.update(0.1)).toBe(false);
     expect(d.update(0.1)).toBe(true);
     expect(d.update(0.9)).toBe(true); // single frame open: still down
     expect(d.update(0.1)).toBe(true);
+    expect(d.update(0.9)).toBe(true);
     expect(d.update(0.9)).toBe(true);
     expect(d.update(0.9)).toBe(false);
   });
@@ -205,6 +206,46 @@ describe('pinch thresholds on real recorded readings', () => {
     const relaxed = [0.46, 0.55, 0.62, 0.53, 0.41, 0.56, 0.48, 0.65];
     const d = new PinchDetector();
     expect(relaxed.map((r) => d.update(r)).some(Boolean)).toBe(false);
+  });
+});
+
+describe('pinch while moving fast (both measures must agree to lift)', () => {
+  // recorded: while a pinch is held and moving, the 3D reading drifts up to ~0.6
+  // but the flat on-camera fingertip gap stays tight (~0.24-0.5)
+  it('stays down when only the 3D reading drifts open', () => {
+    const d = new PinchDetector();
+    d.update(0.3, 0.3);
+    d.update(0.3, 0.3);
+    expect(d.down).toBe(true);
+    const drift = [0.58, 0.62, 0.66, 0.64, 0.6, 0.63];
+    const states = drift.map((r) => d.update(r, 0.32));
+    expect(states.every(Boolean)).toBe(true);
+  });
+
+  it('lifts when both measures say the fingers opened', () => {
+    const d = new PinchDetector();
+    d.update(0.3, 0.3);
+    d.update(0.3, 0.3);
+    [0.7, 0.72, 0.75, 0.8].forEach((r) => d.update(r, 1.4));
+    expect(d.down).toBe(false);
+  });
+
+  it('still needs a clear pinch on the 3D reading to start', () => {
+    // fingertips overlapping on camera alone (thumb behind the finger) must not start a stroke
+    const d = new PinchDetector();
+    [0.62, 0.65, 0.6, 0.64].forEach((r) => d.update(r, 0.3));
+    expect(d.down).toBe(false);
+  });
+
+  it('ignores a two-frame blip open in the middle of a fast stroke', () => {
+    const d = new PinchDetector();
+    d.update(0.3, 0.3);
+    d.update(0.3, 0.3);
+    d.update(0.75, 1.2);
+    d.update(0.75, 1.2);
+    expect(d.down).toBe(true);
+    d.update(0.3, 0.3);
+    expect(d.down).toBe(true);
   });
 });
 
