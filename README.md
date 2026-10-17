@@ -66,17 +66,30 @@ Order: top-left, top-right, bottom-right, bottom-left. After the fourth, the con
 
 ### 6. Do a test word, then shoot
 
-- **Pinch** (thumb and index touching) = writing. **Open** = pen lifted (the dot follows your hand without sparks).
-- **Open palm, fingers spread, held for a second** = wipe the wall for another take. The *Wipe hold* bar fills up as you hold it.
+1. **Start: hold an open palm toward the camera for about half a second.** Until then, a hand in view does nothing. When it goes live, the pen dot ignites on the wall with a burst of sparks. The *Start hold* bar fills up as you hold.
+2. **Write: pinch** (thumb and index touching) to draw, **open your fingers** to lift the pen between letters.
+3. **Wipe: swipe an open hand sideways**, like wiping a board.
+4. **Stop: lower your hand out of the camera's view for about a second.** Show your palm again to start the next take.
 - Keyboard backups (on either window): **X** clear, **Z** undo last stroke.
+
+The big word on the control screen tracks this: *Show your palm* → *Ready* → *Writing*.
 
 Write "Hello World" once, check it on the filming iPhone, adjust, then roll.
 
 ## Sound
 
-The wall plays Iron Man–style sound effects: a repulsor charge when you pinch, an electric hum with spark crackle that follows your hand speed while you write, a power-down when you let go, a whoosh when you wipe, and blips during calibration. They're synthesized in the browser, so there are no sound files.
+The wall plays Iron Man–style sound effects: a repulsor charge when writing goes live, a power-down when you stop, a whoosh when you wipe, and blips during calibration. Writing itself is silent. The sounds are synthesized in the browser, so there are no sound files.
 
 Browsers only allow sound after you interact with a page, so **click the wall window once** (or press any key there) and it says *Sound on*. Set the volume, or turn sound off, with **Sound effects** under Tuning. To audition every sound, open `/sounds.html`.
+
+## Hiding the projector's rectangle
+
+A projector can't project true black. Its "black" is dim light, so the whole projected area shows as a faint gray rectangle. Software can't draw darker than black, so hide it on the camera side:
+
+- **Lock the filming iPhone's exposure on the ink.** In the Camera app, tap and hold on the glowing writing until *AE/AF Lock* appears, then drag the sun icon down. The ink is far brighter than the projector's black, so the gray rectangle and the wall fall to black while the writing stays bright. This is the single biggest fix.
+- **Turn the projector's brightness down** (eco mode, or lower brightness and contrast) as far as the ink still looks good. Turn off any "dynamic contrast" or "auto iris" that brightens blacks.
+- **Make the projection bigger than the shot**: move the projector back or zoom out so the rectangle's edges fall outside the frame.
+- **In the edit**, crush the shadows a little (lift contrast, lower blacks) and the last trace of the rectangle disappears.
 
 ## Light and dark
 
@@ -97,6 +110,7 @@ The **Pinch** bar shows how closed your fingers are, and the white mark is where
 
 - **No camera / "Couldn't open the camera"**: Chrome needs camera permission (*System Settings → Privacy & Security → Camera → Google Chrome*). The iPhone has to be near the Mac, on the same Apple ID, with Wi-Fi and Bluetooth on. Pick it from the Camera menu.
 - **Ink lags behind the hand**: lower Smoothing, add light (a dark scene drops the camera's frame rate), and check the fps readout under the video (aim for 30+). A wired USB webcam is also an option; any camera Chrome sees shows up in the menu.
+- **Lines are shaky**: the tracking camera is too far away. When your hand is small in its view, the control screen says so. Move the iPhone closer (about 1 to 1.5 m from you), then recalibrate.
 - **Ink jumps around or the hand drops out**: more light on your hand, keep the hand fully in the camera's frame, and avoid a busy background behind you from the camera's point of view.
 - **Ink appears in the wrong place**: recalibrate (C) from the exact spot you'll stand in.
 - **Wall says "not open" but the window is there**: keep the control view window open and visible on the laptop screen (Chrome slows down hidden windows), and refresh the wall window.
@@ -118,7 +132,7 @@ The **Pinch** bar shows how closed your fingers are, and the white mark is where
 ## Development
 
 ```bash
-npm test        # unit tests: calibration math, pinch/palm gestures, smoothing, strokes
+npm test        # unit tests: calibration, gestures, start/stop flow, smoothing, strokes
 npm run build   # type-check + production build into dist/
 ```
 
