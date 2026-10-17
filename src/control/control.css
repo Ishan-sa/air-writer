@@ -1,0 +1,293 @@
+/*
+ * Safelight. The laptop sits in a dark room while Ishan films, so the screen
+ * must not light the scene: everything is drawn in dim darkroom reds, and the
+ * one loud element is the status word he reads from across the room.
+ */
+@import '@fontsource-variable/archivo/wdth.css';
+
+:root {
+  --ground: #120605; /* red-black, not neutral black: a safelit room */
+  --rule: #3a1610;
+  --dim: #a3533f; /* secondary text */
+  --text: #d9806c; /* body text, warm and low-luminance */
+  --glow: #ff5436; /* live states only: writing, active targets */
+  --hush: #2a0f0b; /* button and track fills */
+  --font: 'Archivo Variable', 'Archivo', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--ground); }
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  color: var(--text);
+  background: var(--ground);
+  font: 400 15px/1.5 var(--font);
+  font-stretch: 100%;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------ status */
+
+.status {
+  padding: 28px 36px 22px;
+  border-bottom: 1px solid var(--rule);
+}
+.state {
+  margin: 0;
+  font-size: clamp(56px, 8.4vw, 132px);
+  line-height: 0.92;
+  font-weight: 800;
+  font-stretch: 125%;
+  letter-spacing: -0.02em;
+  color: var(--dim);
+  transition: color 120ms linear, text-shadow 120ms linear;
+}
+.state[data-level='ready'] { color: var(--text); }
+.state[data-level='live'] {
+  color: var(--glow);
+  text-shadow: 0 0 28px rgba(255, 84, 54, 0.35);
+}
+.state[data-level='guide'] { color: var(--glow); }
+.state[data-level='problem'] { color: var(--text); font-stretch: 100%; }
+.state-detail {
+  margin: 12px 0 0;
+  max-width: 70ch;
+  font-size: 18px;
+  font-stretch: 100%;
+  color: var(--dim);
+}
+
+/* ------------------------------------------------------------ layout */
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------ camera feed */
+
+.feed {
+  margin: 0;
+  padding: 24px 28px 20px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  max-height: calc(100vh - 290px);
+  background: #000;
+  overflow: hidden;
+  border-radius: 2px;
+}
+/* the feed is shown as if under a safelight: monochrome, then multiplied red */
+.stage video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: grayscale(1) contrast(1.15) brightness(0.85);
+}
+.stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #b3200f;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+.stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  z-index: 1;
+}
+.camera-msg {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  margin: 0;
+  display: grid;
+  place-content: center;
+  padding: 32px;
+  text-align: center;
+  color: var(--text);
+  max-width: 52ch;
+  margin-inline: auto;
+}
+.camera-msg:empty { display: none; }
+
+figcaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--dim);
+  font-size: 14px;
+}
+.camera-pick { display: flex; align-items: baseline; gap: 10px; }
+select {
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  padding: 2px 18px 2px 0;
+  max-width: 280px;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--dim) 50%), linear-gradient(-45deg, transparent 50%, var(--dim) 50%);
+  background-position: right 6px top 55%, right 2px top 55%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+select option { background: var(--ground); color: var(--text); }
+
+/* ------------------------------------------------------------ rail */
+
+.rail {
+  border-left: 1px solid var(--rule);
+  padding: 24px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  overflow-y: auto;
+}
+.group { display: flex; flex-direction: column; gap: 10px; }
+.note { margin: 0; font-size: 14px; color: var(--dim); }
+.note.good { color: var(--text); }
+.note.bad { color: var(--glow); }
+
+/* actions: the hierarchy is carried by size and fill, not by colour */
+.act {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  font: inherit;
+  font-weight: 560;
+  color: var(--text);
+  background: var(--hush);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.act:hover { border-color: var(--rule); }
+.act:active { transform: translateY(1px); }
+.act-main {
+  padding: 16px 14px;
+  font-size: 20px;
+  font-weight: 700;
+  font-stretch: 112%;
+  color: var(--ground);
+  background: var(--text);
+}
+.act-main:hover { background: #e8907c; border-color: transparent; }
+.act-main kbd { color: var(--ground); border-color: rgba(18, 6, 5, 0.35); }
+.act-wall { border-color: var(--rule); background: transparent; }
+.act-wall:hover { background: var(--hush); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+kbd {
+  font: 600 12px/1 var(--font);
+  min-width: 1.7em;
+  padding: 3px 5px;
+  text-align: center;
+  color: var(--dim);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+.link {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 14px;
+  color: var(--dim);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.link:hover { color: var(--text); }
+
+/* gauges */
+.gauge { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 12px; }
+.gauge-name { font-size: 14px; color: var(--dim); }
+.track { position: relative; height: 6px; background: var(--hush); border-radius: 3px; }
+.fill { height: 100%; width: 0; background: var(--text); border-radius: 3px; }
+.mark { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: var(--glow); }
+
+/* tuning */
+.tuning summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-stretch: 112%;
+  color: var(--text);
+  list-style: none;
+}
+.tuning summary::-webkit-details-marker { display: none; }
+.tuning summary::after { content: ' +'; color: var(--dim); }
+.tuning[open] summary::after { content: ' –'; }
+.slider { display: grid; grid-template-columns: 118px 1fr 42px; align-items: center; gap: 10px; font-size: 14px; }
+.slider output { text-align: right; color: var(--dim); }
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type='range']::-webkit-slider-runnable-track { height: 2px; background: var(--rule); }
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 4px;
+  height: 16px;
+  margin-top: -7px;
+  border-radius: 1px;
+  background: var(--text);
+}
+.check { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; font-size: 14px; color: var(--dim); cursor: pointer; }
+input[type='checkbox'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 3px 0 0;
+  border: 1px solid var(--dim);
+  border-radius: 2px;
+  cursor: pointer;
+}
+input[type='checkbox']:checked { background: var(--text); border-color: var(--text); box-shadow: inset 0 0 0 2px var(--ground); }
+
+.keys { margin: auto 0 0; font-size: 13px; line-height: 1.9; color: var(--dim); }
+
+/* focus that stays visible in the dark */
+:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+input[type='range']:focus-visible { outline-offset: 0; }
+
+@media (max-width: 960px) {
+  main { grid-template-columns: 1fr; }
+  .rail { border-left: 0; border-top: 1px solid var(--rule); }
+  .stage { max-height: none; }
+  .status, .feed, .rail { padding-inline: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .state { transition: none; }
+}

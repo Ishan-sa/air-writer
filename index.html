@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Air Writer</title>
+  </head>
+  <body>
+    <!-- The one big thing: readable from across a dark room while standing at the wall. -->
+    <section class="status" aria-live="polite">
+      <h1 id="state" class="state" data-level="idle">Loading</h1>
+      <p id="state-detail" class="state-detail">Starting the hand tracker.</p>
+    </section>
+
+    <main>
+      <figure class="feed">
+        <div class="stage">
+          <video id="video" playsinline muted></video>
+          <canvas id="overlay"></canvas>
+          <p id="camera-msg" class="camera-msg">Starting camera…</p>
+        </div>
+        <figcaption>
+          <label class="camera-pick">
+            <span>Tracking camera</span>
+            <select id="camera-select"></select>
+          </label>
+          <span id="fps" class="fps"></span>
+        </figcaption>
+      </figure>
+
+      <div class="rail">
+        <div class="group">
+          <button id="open-wall" class="act act-wall">
+            <span>Open the wall</span><kbd>W</kbd>
+          </button>
+          <p id="wall-status" class="note">The wall window isn’t open.</p>
+        </div>
+
+        <div class="group">
+          <button id="calibrate" class="act act-main">
+            <span>Calibrate</span><kbd>C</kbd>
+          </button>
+          <p id="calib-status" class="note">Not calibrated, so ink is drawn big in front of you.</p>
+          <div class="pair">
+            <button id="clear" class="act"><span>Clear</span><kbd>X</kbd></button>
+            <button id="undo" class="act"><span>Undo</span><kbd>Z</kbd></button>
+          </div>
+          <button id="reset-calib" class="link">Forget calibration</button>
+        </div>
+
+        <div class="group gauges">
+          <div class="gauge">
+            <span class="gauge-name">Finger gap</span>
+            <div class="track"><div id="m-pinch" class="fill"></div><i id="m-pinch-mark" class="mark" title="Writing starts here"></i></div>
+          </div>
+          <div class="gauge">
+            <span class="gauge-name">Wipe hold</span>
+            <div class="track"><div id="m-palm" class="fill"></div></div>
+          </div>
+          <p id="r-light" class="note">Checking the light…</p>
+        </div>
+
+        <details class="group tuning">
+          <summary>Tuning</summary>
+          <label class="slider"><span>Smoothing</span><input id="s-smoothing" type="range" min="0" max="1" step="0.05" /><output></output></label>
+          <label class="slider"><span>Ink thickness</span><input id="s-thickness" type="range" min="0.4" max="2.5" step="0.05" /><output></output></label>
+          <label class="slider"><span>Sparks</span><input id="s-sparks" type="range" min="0" max="2.5" step="0.05" /><output></output></label>
+          <label class="slider"><span>Pinch sensitivity</span><input id="s-pinch" type="range" min="0.15" max="0.5" step="0.01" /><output></output></label>
+          <label class="check"><input id="s-palm" type="checkbox" /><span>Open palm wipes the wall</span></label>
+          <label class="check"><input id="s-mirror" type="checkbox" /><span>Mirror the camera (only matters before calibrating)</span></label>
+        </details>
+
+        <p class="keys">
+          On the wall window: <kbd>F</kbd> full screen, <kbd>M</kbd> draw with the mouse, <kbd>Q</kbd> cancel calibrating.
+          <kbd>Space</kbd> captures a corner without pinching.
+        </p>
+      </div>
+    </main>
+
+    <script type="module" src="/src/control/main.ts"></script>
+  </body>
+</html>
