@@ -46,6 +46,11 @@ export class Sparks {
     });
   }
 
+  /** A ring of sparks bursting out from one point (the pen igniting). */
+  burst(x: number, y: number, count: number, u: number) {
+    for (let i = 0; i < count; i++) this.spawn(x, y, u, true, 1.6);
+  }
+
   update(dt: number, u: number) {
     const drag = Math.exp(-2.2 * dt);
     const gravity = 700 * u;

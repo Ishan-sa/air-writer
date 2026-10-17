@@ -15,8 +15,8 @@ export interface Settings {
   pinchDown: number;
   /** Flip the camera image horizontally before mapping (only matters without calibration). */
   mirror: boolean;
-  /** Allow the open-palm gesture to wipe the wall. */
-  palmWipe: boolean;
+  /** Allow a sideways swipe of an open hand to wipe the wall. */
+  swipeWipe: boolean;
   /** Sound effects volume, 0 (off) to 1. */
   sfx: number;
 }
@@ -27,7 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sparks: 1,
   pinchDown: 0.38,
   mirror: true,
-  palmWipe: true,
+  swipeWipe: true,
   sfx: 0.7,
 };
 
@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
 export type Msg =
   | { type: 'pen'; x: number; y: number; down: boolean; visible: boolean; t: number }
   | { type: 'clear' }
+  | { type: 'session'; live: boolean }
   | { type: 'undo' }
   | { type: 'calib'; step: number | null; corners: WallPoint[] }
   | { type: 'settings'; settings: Settings }

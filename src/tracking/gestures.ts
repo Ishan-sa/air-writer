@@ -100,6 +100,18 @@ export function isOpenPalm(world: Lm[]): boolean {
   return pinchRatio(world) > 0.6;
 }
 
+/**
+ * Looser than isOpenPalm: fingers straight and not pinching, spread or not.
+ * Used for the wipe swipe, where a fast-moving hand blurs and fingers close up.
+ */
+export function isHandOpen(world: Lm[]): boolean {
+  const wrist = world[WRIST];
+  for (const f of FINGERS) {
+    if (dist(wrist, world[f.tip]) < dist(wrist, world[f.pip]) * 1.1) return false;
+  }
+  return pinchRatio(world) > 0.6;
+}
+
 /** Fires once after the palm has been held open for `holdMs` (brief dropouts tolerated). */
 export class PalmHold {
   private since: number | null = null;

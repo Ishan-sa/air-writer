@@ -3,9 +3,10 @@
  * so nothing to license). Works on any BaseAudioContext, which lets the
  * sounds be rendered offline for checks.
  *
- *   penDown  — repulsor charge: a rising whine with a click
- *   writing  — a low electric hum that swells with hand speed, plus spark crackle
- *   penUp    — a short power-down
+ *   start    — repulsor charge: a rising whine with a click (going live)
+ *   stop     — a short power-down
+ *
+ * Writing itself is silent on purpose.
  *   wipe     — a whoosh with a high shimmer
  *   blip     — a JARVIS-style UI blip (calibration corners)
  *   chime    — a rising three-note "done" (calibration complete)
@@ -15,9 +16,6 @@ export class Sfx {
   private master: GainNode;
   private verbSend: GainNode;
   private noise: AudioBuffer;
-  private hum: { osc: OscillatorNode[]; filter: BiquadFilterNode; gain: GainNode } | null = null;
-  private speed = 0;
-  private crackleCarry = 0;
 
   constructor(ctx: BaseAudioContext, volume = 0.7) {
     this.ctx = ctx;
@@ -55,7 +53,7 @@ export class Sfx {
 
   // ------------------------------------------------------------ one-shots
 
-  penDown(at = this.ctx.currentTime) {
+  start(at = this.ctx.currentTime) {
     const c = this.ctx;
     // the whine: two detuned saws sweeping up through an opening filter
     const filter = c.createBiquadFilter();
@@ -94,7 +92,7 @@ export class Sfx {
     this.click(at, 0.18);
   }
 
-  penUp(at = this.ctx.currentTime) {
+  stop(at = this.ctx.currentTime) {
     const c = this.ctx;
     const o = c.createOscillator();
     o.type = 'triangle';
@@ -192,87 +190,6 @@ export class Sfx {
     src.start(at, Math.random());
     src.stop(at + 0.04);
     this.out(g, 0.3);
-  }
-
-  // ------------------------------------------------------------ the writing hum
-
-  /** Starts the hum (call on pen down). */
-  startHum(at = this.ctx.currentTime) {
-    if (this.hum) return;
-    const c = this.ctx;
-    const filter = c.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.Q.value = 3;
-    filter.frequency.value = 500;
-    const gain = c.createGain();
-    gain.gain.setValueAtTime(0.0001, at);
-    gain.gain.exponentialRampToValueAtTime(0.05, at + 0.2);
-    filter.connect(gain);
-    const osc = [
-      { type: 'sawtooth' as const, f: 110, d: 0 },
-      { type: 'sawtooth' as const, f: 110, d: 7 },
-      { type: 'sine' as const, f: 55, d: 0 },
-    ].map(({ type, f, d }) => {
-      const o = c.createOscillator();
-      o.type = type;
-      o.frequency.value = f;
-      o.detune.value = d;
-      o.connect(filter);
-      o.start(at);
-      return o;
-    });
-    this.out(gain, 0.25);
-    this.hum = { osc, filter, gain };
-  }
-
-  /** Feed the pen speed every frame while writing (wall units per second) so the hum and crackle follow the hand. */
-  writing(speed: number, dt: number) {
-    if (!this.hum) return;
-    const c = this.ctx;
-    this.speed += (Math.min(speed, 3) - this.speed) * Math.min(dt * 10, 1);
-    const k = this.speed / 3; // 0 still … 1 fast
-    const now = c.currentTime;
-    this.hum.filter.frequency.setTargetAtTime(450 + 2600 * k, now, 0.05);
-    this.hum.gain.gain.setTargetAtTime(0.04 + 0.06 * k, now, 0.08);
-    this.hum.osc[0].frequency.setTargetAtTime(110 + 40 * k, now, 0.1);
-    this.hum.osc[1].frequency.setTargetAtTime(110 + 40 * k, now, 0.1);
-    // spark crackle: tiny noise grains, more of them the faster the hand moves
-    this.crackleCarry += (14 + 90 * k) * dt;
-    while (this.crackleCarry >= 1) {
-      this.crackleCarry -= 1;
-      this.grain(now + Math.random() * dt);
-    }
-  }
-
-  private grain(at: number) {
-    const c = this.ctx;
-    const src = c.createBufferSource();
-    src.buffer = this.noise;
-    const bp = c.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 2000 + Math.random() * 5000;
-    bp.Q.value = 6;
-    const g = c.createGain();
-    const len = 0.008 + Math.random() * 0.02;
-    g.gain.setValueAtTime(0.04 + Math.random() * 0.1, at);
-    g.gain.exponentialRampToValueAtTime(0.0001, at + len);
-    const pan = c.createStereoPanner();
-    pan.pan.value = Math.random() * 0.8 - 0.4;
-    src.connect(bp).connect(g).connect(pan);
-    src.start(at, Math.random() * 1.5);
-    src.stop(at + len + 0.01);
-    this.out(pan, 0.15);
-  }
-
-  /** Fades the hum out (call on pen up). */
-  stopHum(at = this.ctx.currentTime) {
-    if (!this.hum) return;
-    const { osc, gain } = this.hum;
-    gain.gain.cancelScheduledValues(at);
-    gain.gain.setTargetAtTime(0.0001, at, 0.04);
-    osc.forEach((o) => o.stop(at + 0.3));
-    this.hum = null;
-    this.speed = 0;
   }
 }
 

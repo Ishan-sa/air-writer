@@ -23,6 +23,17 @@ let live: Stroke | null = null;
 let wipeStart: number | null = null; // fade-out in progress
 const WIPE_MS = 500;
 const RELEASE_TRIM_MS = 70;
+const LOSS_TRIM_MS = 400;
+let igniting = false;
+let igniteAt = -Infinity;
+
+/** A quick accidental pinch leaves a dot or a tiny tick: not worth keeping. */
+function isAccidental(s: Stroke) {
+  let len = 0;
+  for (let i = 1; i < s.length; i++) len += Math.hypot(s[i].x - s[i - 1].x, s[i].y - s[i - 1].y);
+  const ms = s.length ? s[s.length - 1].t - s[0].t : 0;
+  return len < 0.01 && ms < 200;
+}
 const PEN_STALE_MS = 300;
 
 interface Pen { x: number; y: number; down: boolean; visible: boolean; at: number }
@@ -37,7 +48,6 @@ const sparks = new Sparks();
 // Browsers only allow audio after the viewer interacts with the page, so the
 // sound engine starts on the first click or key press in the wall window.
 let sfx: Sfx | null = null;
-let soundDown = false; // pen state as last heard, so a split stroke doesn't replay the charge
 function ensureAudio() {
   if (sfx) return;
   try {
@@ -49,18 +59,6 @@ function ensureAudio() {
 }
 ['pointerdown', 'keydown'].forEach((ev) => window.addEventListener(ev, ensureAudio, { capture: true }));
 
-function penSound(down: boolean) {
-  if (down === soundDown) return;
-  soundDown = down;
-  if (!sfx) return;
-  if (down) {
-    sfx.penDown();
-    sfx.startHum();
-  } else {
-    sfx.stopHum();
-    sfx.penUp();
-  }
-}
 
 // ---------------------------------------------------------------- sizing
 
@@ -116,11 +114,14 @@ function penInput(x: number, y: number, down: boolean, visible: boolean, t: numb
   const jumped = Math.hypot(x - pen.x, y - pen.y) > MAX_JUMP;
   pen = { x, y, down: down && visible, visible, at: performance.now() };
   if (calib.step !== null) {
-    penSound(false);
     endStroke(t);
     return;
   }
-  penSound(pen.down);
+  if (pen.visible && igniting) {
+    igniting = false;
+    sparks.burst(x * W, y * H, 70, u);
+    igniteAt = performance.now();
+  }
   if (pen.down) {
     if (wipeStart !== null) finishWipe();
     if (live && jumped) {
@@ -130,14 +131,17 @@ function penInput(x: number, y: number, down: boolean, visible: boolean, t: numb
     if (!live) live = [];
     addPoint(live, { x, y, t });
   } else {
-    endStroke(t);
+    // pen up because the hand left view (lowered while still pinched): drop the
+    // tail it drew on the way down; a normal release only trims the finger drag
+    endStroke(t, visible ? RELEASE_TRIM_MS : LOSS_TRIM_MS);
   }
 }
 
-function endStroke(upAt?: number) {
+function endStroke(upAt?: number, trimMs = RELEASE_TRIM_MS) {
   if (!live) return;
-  const done = trimTail(live, RELEASE_TRIM_MS, upAt);
+  const done = trimTail(live, trimMs, upAt);
   live = null;
+  if (isAccidental(done)) return;
   strokes.push(done);
   bake(done);
 }
@@ -171,6 +175,15 @@ const channel = openChannel((msg: Msg) => {
     case 'pen':
       if (!mouseMode) penInput(msg.x, msg.y, msg.down, msg.visible, performance.now());
       break;
+    case 'session':
+      if (msg.live) {
+        sfx?.start();
+        igniting = true; // burst of sparks where the pen first appears
+      } else {
+        sfx?.stop();
+        endStroke();
+      }
+      break;
     case 'clear':
       clearWall();
       break;
@@ -196,17 +209,10 @@ const channel = openChannel((msg: Msg) => {
 
 let lastFrame = performance.now();
 
-let lastSoundPos = { x: 0.5, y: 0.5 };
-
 function frame(now: number) {
   const dt = Math.min((now - lastFrame) / 1000, 0.05);
   lastFrame = now;
 
-  // the writing hum follows how fast the pen moves across the wall
-  if (sfx && pen.down && dt > 0) {
-    sfx.writing(Math.hypot(pen.x - lastSoundPos.x, pen.y - lastSoundPos.y) / dt, dt);
-  }
-  lastSoundPos = { x: pen.x, y: pen.y };
 
   if (now - pen.at > PEN_STALE_MS && !mouseMode) {
     if (pen.visible || pen.down) penInput(pen.x, pen.y, false, false, now);
@@ -259,7 +265,9 @@ function frame(now: number) {
 
 function drawDot(x: number, y: number, down: boolean, alpha: number, now: number) {
   const flicker = down ? 0.85 + 0.15 * Math.sin(now / 23) * Math.sin(now / 37) : 1;
-  const glowR = (down ? 46 : 26) * u * flicker;
+  // the pen "ignites" when writing goes live: a bright swell that settles in ~½ s
+  const ignite = 1 + 2.5 * Math.max(0, 1 - (now - igniteAt) / 500);
+  const glowR = (down ? 46 : 26) * u * flicker * ignite;
   const coreR = (down ? 5.5 : 4) * u;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';

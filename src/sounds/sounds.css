@@ -11,11 +11,5 @@ body { display: block; }
 .sounds button span { font-weight: 400; font-size: 14px; font-stretch: 100%; color: var(--dim); }
 .sounds button:hover { border-color: var(--rule); }
 .sounds button:active { transform: translateY(1px); }
-.pad {
-  margin-top: 18px; height: 200px; display: grid; place-content: center;
-  border: 1px dashed var(--rule); border-radius: 3px; color: var(--dim);
-  user-select: none; touch-action: none; cursor: crosshair;
-}
-.pad.down { border-style: solid; border-color: var(--glow); color: var(--glow); }
 .vol { display: flex; align-items: center; gap: 12px; margin-top: 18px; color: var(--dim); font-size: 14px; }
 .vol input { width: 200px; }
