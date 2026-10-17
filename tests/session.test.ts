@@ -74,6 +74,30 @@ describe('writing session', () => {
     expect(out.filter((o) => o.event === 'wipe')).toHaveLength(1);
   });
 
+  it('wipes on a swipe as small as the ones recorded (wrist moved ~0.1 of the frame in 400 ms)', () => {
+    const s = new WriteSession();
+    let { t } = run(s, repeat(palm(), 700));
+    ({ t } = run(s, repeat(idle(), 800), t));
+    const swipe = Array.from({ length: 12 }, (_, i) => ({ ...palm(0.5 + i * 0.0085), palm: false }));
+    const { out } = run(s, swipe, t);
+    expect(out.filter((o) => o.event === 'wipe')).toHaveLength(1);
+  });
+
+  it('holding an open palm for a second while live wipes', () => {
+    const s = new WriteSession();
+    let { t } = run(s, repeat(palm(), 700));
+    ({ t } = run(s, repeat(idle(), 300), t)); // lower or close the starting palm first
+    const { out } = run(s, repeat(palm(), 1200), t);
+    expect(out.filter((o) => o.event === 'wipe')).toHaveLength(1);
+    expect(Math.max(...out.map((o) => o.wipeProgress))).toBe(1);
+  });
+
+  it('keeping the starting palm up does not wipe', () => {
+    const s = new WriteSession();
+    const { out } = run(s, repeat(palm(), 3000));
+    expect(out.some((o) => o.event === 'wipe')).toBe(false);
+  });
+
   it('moving a pinched or relaxed hand quickly is not a wipe', () => {
     const s = new WriteSession();
     let { t } = run(s, repeat(palm(), 700));
@@ -89,7 +113,8 @@ describe('writing session', () => {
     const s = new WriteSession();
     let { t } = run(s, repeat(palm(), 700));
     ({ t } = run(s, repeat(idle(), 800), t));
-    const drift = Array.from({ length: 60 }, (_, i) => ({ ...palm(0.3 + i * 0.006), palm: false })); // 0.36 over 2 s
+    // writing-speed movement: the recorded pen moved ~0.03 of the frame per second
+    const drift = Array.from({ length: 60 }, (_, i) => ({ ...palm(0.3 + i * 0.003), palm: false })); // 0.18 over 2 s
     const { out } = run(s, drift, t);
     expect(out.some((o) => o.event === 'wipe')).toBe(false);
   });

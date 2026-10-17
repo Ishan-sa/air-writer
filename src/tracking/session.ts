@@ -14,6 +14,7 @@ export interface SessionOutput {
   penDown: boolean;
   visible: boolean; // show the pen dot on the wall
   startProgress: number; // 0..1 while the start palm is being held
+  wipeProgress: number; // 0..1 while a wipe palm is being held
 }
 
 /**
@@ -22,11 +23,16 @@ export interface SessionOutput {
  *   off ──(open palm held ½ s)──▶ live ──(hand out of view 1 s)──▶ off
  *
  * Off: a hand in view does nothing (no dot, no ink).
- * Live: pinch writes, open fingers lift, a sideways swipe of an open hand wipes.
+ * Live: pinch writes, open fingers lift. Wipe by holding an open palm up for a
+ * second (once the starting palm has been lowered or closed), or by swiping an
+ * open hand sideways.
  */
 export class WriteSession {
   armed = false;
+  swipeEnabled = true;
   private startHold: PalmHold;
+  private wipeHold: PalmHold;
+  private startPalmDone = false; // the palm that started this session has been lowered/closed
   private lostSince: number | null = null;
   private needsRelease = false;
   private startedAt = -Infinity;
@@ -37,11 +43,13 @@ export class WriteSession {
     public startMs = 500,
     public stopMs = 1000,
     /** A wipe is an open hand travelling this far across the frame… */
-    public swipeDistance = 0.22,
+    // recorded swipes moved the wrist ~0.1 of the frame; writing moves it ~0.03 per second
+    public swipeDistance = 0.08,
     /** …within this long. */
     public swipeWindowMs = 400,
   ) {
     this.startHold = new PalmHold(startMs, 150);
+    this.wipeHold = new PalmHold(1000, 150);
   }
 
   /** Don't write until the pinch has been released once (e.g. right after calibrating). */
@@ -64,27 +72,32 @@ export class WriteSession {
       if (hold.fire) {
         this.armed = true;
         this.startedAt = now;
+        this.startPalmDone = false;
         this.trail = [];
-        return { event: 'start', penDown: false, visible: true, startProgress: 1 };
+        return { event: 'start', penDown: false, visible: true, startProgress: 1, wipeProgress: 0 };
       }
-      return { penDown: false, visible: false, startProgress: hold.progress };
+      return { penDown: false, visible: false, startProgress: hold.progress, wipeProgress: 0 };
     }
 
     const penDown = f.pinch && !this.needsRelease;
-    const wipe = !penDown && this.swiped(f, now);
-    return { event: wipe ? 'wipe' : undefined, penDown, visible: true, startProgress: 0 };
+    if (!f.palm) this.startPalmDone = true;
+    const hold = this.wipeHold.update(this.startPalmDone && f.palm && !f.pinch, now);
+    const wipe = hold.fire || (this.swipeEnabled && !penDown && this.swiped(f, now));
+    return { event: wipe ? 'wipe' : undefined, penDown, visible: true, startProgress: 0, wipeProgress: hold.progress };
   }
 
   private absent(now: number): SessionOutput {
     this.startHold.update(false, now);
+    this.wipeHold.update(false, now);
     if (this.armed) {
+      this.startPalmDone = true; // lowering the hand counts as putting the starting palm away
       this.lostSince ??= now;
       if (now - this.lostSince >= this.stopMs) {
         this.stop();
-        return { event: 'stop', penDown: false, visible: false, startProgress: 0 };
+        return { event: 'stop', penDown: false, visible: false, startProgress: 0, wipeProgress: 0 };
       }
     }
-    return { penDown: false, visible: false, startProgress: 0 };
+    return { penDown: false, visible: false, startProgress: 0, wipeProgress: 0 };
   }
 
   /** An open hand that travelled far enough sideways, quickly enough. */
