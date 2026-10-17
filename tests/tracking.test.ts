@@ -1,0 +1,237 @@
+import { describe, expect, it } from 'vitest';
+import { applyHomography, computeHomography, isUsableQuad } from '../src/tracking/homography';
+import { OneEuroFilter, PointFilter } from '../src/tracking/oneEuro';
+import { isOpenPalm, PalmHold, PinchDetector, pinchRatio, type Lm } from '../src/tracking/gestures';
+import { CALIB_CORNERS, cameraToWall, defaultMap } from '../src/tracking/mapping';
+import { addPoint, trimTail, type Stroke } from '../src/wall/strokes';
+
+const close = (a: number, b: number, eps = 1e-6) => expect(Math.abs(a - b)).toBeLessThan(eps);
+
+describe('homography', () => {
+  it('maps the four source points exactly onto the targets', () => {
+    // a skewed quad, like a hand pointing at the corners seen from an angle
+    const src = [
+      { x: 0.62, y: 0.31 },
+      { x: 0.35, y: 0.28 },
+      { x: 0.38, y: 0.66 },
+      { x: 0.6, y: 0.7 },
+    ];
+    const H = computeHomography(src, CALIB_CORNERS)!;
+    expect(H).not.toBeNull();
+    src.forEach((p, i) => {
+      const q = applyHomography(H, p);
+      close(q.x, CALIB_CORNERS[i].x);
+      close(q.y, CALIB_CORNERS[i].y);
+    });
+  });
+
+  it('keeps straight lines straight (midpoint of an edge stays on that edge)', () => {
+    const src = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 },
+    ];
+    const H = computeHomography(src, CALIB_CORNERS)!;
+    const q = applyHomography(H, { x: 0.5, y: 0 });
+    close(q.y, 0.1);
+    close(q.x, 0.5);
+  });
+
+  it('rejects degenerate input', () => {
+    const line = [0, 1, 2, 3].map((i) => ({ x: i * 0.1, y: i * 0.1 }));
+    expect(computeHomography(line, CALIB_CORNERS)).toBeNull();
+  });
+
+  it('accepts a convex quad and rejects a twisted or tiny one', () => {
+    expect(isUsableQuad(CALIB_CORNERS)).toBe(true);
+    const twisted = [CALIB_CORNERS[0], CALIB_CORNERS[2], CALIB_CORNERS[1], CALIB_CORNERS[3]];
+    expect(isUsableQuad(twisted)).toBe(false);
+    const tiny = CALIB_CORNERS.map((p) => ({ x: p.x * 0.01, y: p.y * 0.01 }));
+    expect(isUsableQuad(tiny)).toBe(false);
+  });
+});
+
+describe('mapping', () => {
+  it('default map sends the image centre to the wall centre and mirrors x', () => {
+    const c = defaultMap({ x: 0.5, y: 0.425 }, true);
+    close(c.x, 0.5);
+    close(c.y, 0.5);
+    // hand on the image's left = Ishan's right = the wall's right
+    expect(defaultMap({ x: 0.3, y: 0.4 }, true).x).toBeGreaterThan(0.5);
+    expect(defaultMap({ x: 0.3, y: 0.4 }, false).x).toBeLessThan(0.5);
+  });
+
+  it('uses the homography when calibrated', () => {
+    const src = [
+      { x: 0.7, y: 0.2 },
+      { x: 0.3, y: 0.2 },
+      { x: 0.3, y: 0.6 },
+      { x: 0.7, y: 0.6 },
+    ];
+    const H = computeHomography(src, CALIB_CORNERS)!;
+    const q = cameraToWall({ x: 0.5, y: 0.4 }, H, false)!;
+    close(q.x, 0.5);
+    close(q.y, 0.5);
+  });
+});
+
+describe('mapping guards', () => {
+  it('clamps points far outside the wall', () => {
+    const q = cameraToWall({ x: -2, y: 5 }, null, false)!;
+    expect(q.x).toBeGreaterThanOrEqual(-0.2);
+    expect(q.y).toBeLessThanOrEqual(1.2);
+  });
+
+  it('returns null past the perspective horizon instead of flipping to the other side', () => {
+    // a strongly tilted calibration: w = 0 somewhere to the right of the image
+    const src = [
+      { x: 0.4, y: 0.3 },
+      { x: 0.6, y: 0.35 },
+      { x: 0.6, y: 0.55 },
+      { x: 0.4, y: 0.6 },
+    ];
+    const H = computeHomography(src, CALIB_CORNERS)!;
+    const xs = Array.from({ length: 200 }, (_, i) => -20 + i * 0.2);
+    const results = xs.map((x) => cameraToWall({ x, y: 0.45 }, H, false));
+    expect(results.some((r) => r === null)).toBe(true);
+    expect(cameraToWall({ x: 0.5, y: 0.45 }, H, false)).not.toBeNull();
+  });
+});
+
+describe('one euro filter', () => {
+  it('passes a constant signal through unchanged', () => {
+    const f = new OneEuroFilter();
+    for (let i = 0; i < 30; i++) close(f.filter(0.4, i / 60), 0.4);
+  });
+
+  it('reduces jitter on a still hand', () => {
+    const p = new PointFilter();
+    p.setSmoothing(0.5);
+    const out: number[] = [];
+    for (let i = 0; i < 120; i++) out.push(p.filter(0.5 + (i % 2 ? 0.01 : -0.01), 0.5, i / 60).x);
+    const tail = out.slice(60);
+    const spread = Math.max(...tail) - Math.min(...tail);
+    expect(spread).toBeLessThan(0.02 * 0.5); // at least halves a ±1% wobble
+  });
+
+  it('keeps up with a fast stroke (lag stays small)', () => {
+    const p = new PointFilter();
+    p.setSmoothing(0.5);
+    let x = 0;
+    for (let i = 0; i <= 30; i++) x = p.filter(i / 30, 0.5, i / 60).x; // across the wall in 0.5 s
+    expect(1 - x).toBeLessThan(0.08);
+  });
+});
+
+/** Builds world landmarks for a hand: 21 points, metres-ish scale. */
+function hand(opts: { pinch?: boolean; open?: boolean }): Lm[] {
+  const lm: Lm[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
+  const set = (i: number, x: number, y: number) => (lm[i] = { x, y, z: 0 });
+  set(0, 0, 0); // wrist
+  set(9, 0, -0.09); // middle MCP → hand size 0.09
+  set(5, -0.025, -0.085); // index MCP
+  set(13, 0.02, -0.085);
+  set(17, 0.04, -0.075);
+  const fingerX = opts.open ? [-0.045, -0.012, 0.022, 0.055] : [-0.025, 0, 0.02, 0.04];
+  const curled = !opts.open;
+  [
+    [6, 8],
+    [10, 12],
+    [14, 16],
+    [18, 20],
+  ].forEach(([pip, tip], k) => {
+    set(pip, fingerX[k], -0.12);
+    set(tip, fingerX[k] * (opts.open ? 1.3 : 1), curled ? -0.1 : -0.17);
+  });
+  set(3, -0.05, -0.04);
+  set(4, opts.open ? -0.085 : -0.04, opts.open ? -0.06 : -0.09); // thumb tip
+  if (opts.pinch) set(4, lm[8].x + 0.005, lm[8].y + 0.005);
+  return lm;
+}
+
+describe('pinch detection', () => {
+  it('measures a pinch as a small ratio', () => {
+    expect(pinchRatio(hand({ pinch: true }))).toBeLessThan(0.2);
+    expect(pinchRatio(hand({ open: true }))).toBeGreaterThan(0.6);
+  });
+
+  it('needs two frames to change state and ignores a one-frame blip', () => {
+    const d = new PinchDetector();
+    expect(d.update(0.1)).toBe(false);
+    expect(d.update(0.1)).toBe(true);
+    expect(d.update(0.9)).toBe(true); // single frame open: still down
+    expect(d.update(0.1)).toBe(true);
+    expect(d.update(0.9)).toBe(true);
+    expect(d.update(0.9)).toBe(false);
+  });
+
+  it('uses hysteresis: hovering between thresholds keeps the current state', () => {
+    const d = new PinchDetector();
+    d.setDownThreshold(0.3); // up at 0.45
+    d.update(0.2);
+    d.update(0.2);
+    expect(d.down).toBe(true);
+    for (let i = 0; i < 5; i++) d.update(0.4);
+    expect(d.down).toBe(true);
+    const fresh = new PinchDetector();
+    fresh.setDownThreshold(0.3);
+    for (let i = 0; i < 5; i++) fresh.update(0.4);
+    expect(fresh.down).toBe(false);
+  });
+});
+
+describe('open palm wipe', () => {
+  it('recognises a spread open hand but not a relaxed or pinching one', () => {
+    expect(isOpenPalm(hand({ open: true }))).toBe(true);
+    expect(isOpenPalm(hand({}))).toBe(false);
+    expect(isOpenPalm(hand({ pinch: true }))).toBe(false);
+  });
+
+  it('fires once after a full one-second hold', () => {
+    const h = new PalmHold(1000, 150);
+    let fired = 0;
+    for (let t = 0; t <= 2000; t += 33) if (h.update(true, t).fire) fired++;
+    expect(fired).toBe(1);
+  });
+
+  it('does not fire when the palm drops before a second', () => {
+    const h = new PalmHold(1000, 150);
+    let fired = false;
+    for (let t = 0; t < 800; t += 33) fired ||= h.update(true, t).fire;
+    for (let t = 800; t < 1200; t += 33) fired ||= h.update(false, t).fire;
+    for (let t = 1200; t < 1900; t += 33) fired ||= h.update(true, t).fire;
+    expect(fired).toBe(false);
+  });
+
+  it('tolerates a brief tracking dropout during the hold', () => {
+    const h = new PalmHold(1000, 150);
+    let fired = false;
+    for (let t = 0; t < 500; t += 33) fired ||= h.update(true, t).fire;
+    fired ||= h.update(false, 533).fire;
+    for (let t = 566; t < 1200; t += 33) fired ||= h.update(true, t).fire;
+    expect(fired).toBe(true);
+  });
+});
+
+describe('strokes', () => {
+  it('skips points closer than the minimum step', () => {
+    const s: Stroke = [];
+    expect(addPoint(s, { x: 0.5, y: 0.5, t: 0 })).toBe(true);
+    expect(addPoint(s, { x: 0.5001, y: 0.5, t: 16 })).toBe(false);
+    expect(addPoint(s, { x: 0.51, y: 0.5, t: 33 })).toBe(true);
+  });
+
+  it('trims the release drag but keeps a dot for a tap', () => {
+    const s: Stroke = Array.from({ length: 10 }, (_, i) => ({ x: i / 10, y: 0, t: i * 20 }));
+    const trimmed = trimTail(s, 70);
+    expect(trimmed[trimmed.length - 1].t).toBeLessThanOrEqual(180 - 70);
+    expect(trimTail([{ x: 0, y: 0, t: 0 }, { x: 0.01, y: 0, t: 10 }], 70)).toHaveLength(1);
+  });
+
+  it('measures the trim from the pen-up moment, so a pause before lifting keeps the ink', () => {
+    const s: Stroke = Array.from({ length: 10 }, (_, i) => ({ x: i / 10, y: 0, t: i * 20 }));
+    // last point at 180 ms, pen lifted at 400 ms after holding still: nothing to trim
+    expect(trimTail(s, 70, 400)).toHaveLength(10);
+  });
+});
