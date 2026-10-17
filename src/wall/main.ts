@@ -37,8 +37,9 @@ const sparks = new Sparks();
 
 function resize() {
   const dpr = window.devicePixelRatio || 1;
-  W = Math.round(window.innerWidth * dpr);
-  H = Math.round(window.innerHeight * dpr);
+  // never 0: a minimised window would otherwise make every drawImage throw
+  W = Math.max(1, Math.round(window.innerWidth * dpr));
+  H = Math.max(1, Math.round(window.innerHeight * dpr));
   canvas.width = baked.width = liveLayer.width = W;
   canvas.height = baked.height = liveLayer.height = H;
   u = H / 1080;
