@@ -9,7 +9,7 @@ import type { TrackInfo, WallPoint } from '../shared/types';
  * reads as the brightest, warmest thing on the wall.
  */
 
-export type HudMode = 'standby' | 'armed' | 'writing' | 'grab' | 'calib';
+export type HudMode = 'standby' | 'paused' | 'armed' | 'writing' | 'grab' | 'calib';
 
 export interface HudFrame {
   now: number;
@@ -31,6 +31,7 @@ export interface HudFrame {
   showCam: boolean;
   video: HTMLVideoElement | null; // null until the wall's camera is playing
   camLabel: string;
+  soundOn: boolean; // browsers keep sound off until the wall window is clicked once
 }
 
 export interface GrabBox {
@@ -95,7 +96,7 @@ export class Hud {
 
   update(f: HudFrame) {
     const k = Math.min(f.dt * 4, 1);
-    const live = f.mode !== 'standby';
+    const live = f.mode !== 'standby' && f.mode !== 'paused';
     this.power += ((live ? 1 : 0.5) - this.power) * Math.min(f.dt * 2.5, 1);
     this.hudAlpha += ((f.showHud ? 1 : 0) - this.hudAlpha) * k;
     this.camAlpha += ((f.showCam ? 1 : 0) - this.camAlpha) * k;
@@ -170,25 +171,30 @@ export class Hud {
   }
 
   /** Over the ink: frame, readouts, camera, reticle, banners. */
-  drawFront(ctx: CanvasRenderingContext2D, f: HudFrame, grab: GrabBox | null) {
+  drawFront(ctx: CanvasRenderingContext2D, f: HudFrame, grab: GrabBox | null, mark: (part: string) => void = () => {}) {
     const big = { ...f, u: f.u * PANEL };
     ctx.save();
     if (this.hudAlpha > 0.01) {
       ctx.globalAlpha = this.hudAlpha;
       this.drawFrame(ctx, f);
+      mark('frame');
       this.drawTitle(ctx, big);
       this.drawTelemetry(ctx, big);
+      mark('readouts');
       this.drawLegend(ctx, big);
+      mark('legend');
       this.drawPalm(ctx, big);
       if (f.mode !== 'calib') this.drawReticle(ctx, f);
       this.drawBanner(ctx, big);
       this.drawHint(ctx, big);
+      mark('overlays');
     }
     ctx.globalAlpha = 1;
     if (grab) this.drawGrab(ctx, big, grab);
     if (this.camAlpha > 0.01) {
       ctx.globalAlpha = this.camAlpha;
       this.drawCamera(ctx, big);
+      mark('camera');
     }
     ctx.restore();
   }
@@ -275,7 +281,7 @@ export class Hud {
     text(ctx, '// HAND-TRACKED LIGHT', x + 214 * u, y - 1 * u, 11 * u, CYAN(0.5 * p), 'left', 500, 1.5 * u);
 
     const [label, col] = MODE_LABEL[f.mode];
-    const blink = f.mode === 'writing' ? 0.55 + 0.45 * Math.sin(now / 90) : f.mode === 'standby' ? 0.4 + 0.3 * Math.sin(now / 700) : 1;
+    const blink = f.mode === 'writing' ? 0.55 + 0.45 * Math.sin(now / 90) : f.mode === 'standby' || f.mode === 'paused' ? 0.4 + 0.3 * Math.sin(now / 700) : 1;
     ctx.fillStyle = col(blink);
     ctx.beginPath();
     ctx.arc(x + 5 * u, y + 30 * u, 4.5 * u, 0, Math.PI * 2);
@@ -284,6 +290,7 @@ export class Hud {
 
     const session = this.sessionAt === null ? 'IDLE' : `SESSION ${clock(now - this.sessionAt)}`;
     text(ctx, session, x + 20 * u, y + 58 * u, 12 * u, CYAN(0.6 * p), 'left', 500, 1.5 * u);
+    if (!f.soundOn) text(ctx, 'SOUND OFF  ·  CLICK THE WALL ONCE', x + 150 * u, y + 58 * u, 12 * u, WARM(0.5 + 0.3 * Math.sin(now / 500)), 'left', 600, 1.5 * u);
 
     // underline with a notch
     ctx.fillStyle = CYAN(0.35 * p);
@@ -304,9 +311,11 @@ export class Hud {
       ['STROKES', `${pad2(f.strokes)}   INK ${Math.round(f.inkPx).toLocaleString('en-US')} PX`],
     ];
     let y = H - 150 * u;
+    const slow = !!t && t.fps > 0 && t.fps < 20;
     for (const [k, v] of rows) {
+      const warn = slow && k === 'TRACK';
       text(ctx, k, x, y, 12 * u, CYAN(0.55 * p), 'left', 500, 2 * u);
-      text(ctx, v, vx, y, 13 * u, ICE(0.9 * p), 'left', 500, 1 * u);
+      text(ctx, warn ? `${v}  ·  SLOW` : v, vx, y, 13 * u, warn ? RED(0.95) : ICE(0.9 * p), 'left', warn ? 700 : 500, 1 * u);
       y += 22 * u;
     }
 
@@ -335,8 +344,10 @@ export class Hud {
     const x = W - 64 * u;
     const t = f.track;
     const rows: [string, string, boolean][] =
-      f.mode === 'standby'
-        ? [['✋', 'HOLD AN OPEN PALM  ·  START', true]]
+      f.mode === 'paused'
+        ? [['⌨️', 'S ON THE LAPTOP  ·  KEEP PAUSED', false]]
+        : f.mode === 'standby'
+        ? [['✋', 'HOLD AN OPEN PALM UP  ·  START', true]]
         : [
             ['☝️', 'POINT  ·  WRITE', f.mode === 'writing'],
             ['✌️', 'TWO FINGERS  ·  LIFT', f.mode === 'armed' && f.penAlpha > 0.5 && !f.down],
@@ -475,10 +486,11 @@ export class Hud {
   }
 
   private drawHint(ctx: CanvasRenderingContext2D, f: HudFrame) {
-    if (f.mode !== 'standby' || this.banner || (f.track?.start ?? 0) > 0) return;
+    if ((f.mode !== 'standby' && f.mode !== 'paused') || this.banner || (f.track?.start ?? 0) > 0) return;
     const { u, W, H, now } = f;
     const a = 0.3 + 0.25 * Math.sin(now / 600);
-    text(ctx, 'RAISE AN OPEN PALM TO BEGIN', W / 2, H * 0.82, 15 * u, CYAN(a), 'center', 500, 7 * u);
+    const hint = f.mode === 'paused' ? 'TRACKING PAUSED WHILE THE LAPTOP IS IN USE' : 'RAISE AN OPEN PALM TO BEGIN';
+    text(ctx, hint, W / 2, H * 0.7, 15 * u, CYAN(a), 'center', 500, 7 * u);
   }
 
   private drawGrab(ctx: CanvasRenderingContext2D, f: HudFrame, g: GrabBox) {
@@ -710,6 +722,7 @@ export class Hud {
 
 const MODE_LABEL: Record<HudMode, [string, (a: number) => string]> = {
   standby: ['STANDBY', CYAN],
+  paused: ['PAUSED  ·  LAPTOP IN USE', CYAN],
   armed: ['ARMED', CYAN],
   writing: ['WRITING', WARM],
   grab: ['HOLDING', ICE],

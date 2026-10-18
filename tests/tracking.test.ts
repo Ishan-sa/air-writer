@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyHomography, computeHomography, isUsableQuad } from '../src/tracking/homography';
 import { OneEuroFilter, PointFilter } from '../src/tracking/oneEuro';
-import { fingerReach, handInFrame, isOpenPalm, PalmHold, PinchDetector, pinchRatio, PointDetector, type Lm } from '../src/tracking/gestures';
+import { fingerReach, handInFrame, isOpenPalm, PalmHold, PinchDetector, pinchRatio, PointDetector, uprightness, type Lm } from '../src/tracking/gestures';
 import { CALIB_CORNERS, cameraToWall, defaultMap } from '../src/tracking/mapping';
 import { addPoint, LazyBrush, smoothStroke, trimTail, type Stroke } from '../src/wall/strokes';
 
@@ -489,3 +489,28 @@ describe('string stabilizer (lazy brush)', () => {
   });
 });
 
+
+describe('uprightness', () => {
+  // a 16:9 frame: image x is in widths, y in heights (aspect = height / width)
+  const aspect = 9 / 16;
+  const at = (wrist: [number, number], knuckle: [number, number]) => {
+    const img = Array.from({ length: 21 }, () => ({ x: wrist[0], y: wrist[1], z: 0 }));
+    img[9] = { x: knuckle[0], y: knuckle[1], z: 0 };
+    return img;
+  };
+
+  it('is 1 for a hand held straight up', () => {
+    close(uprightness(at([0.5, 0.6], [0.5, 0.4]), aspect), 1);
+  });
+
+  it('is near 0 for hands on a keyboard, pointing sideways (recorded at the laptop: ~0.4 or less)', () => {
+    // from the log: wrist (325, 814), middle knuckle (289, 788)
+    expect(uprightness(at([0.325, 0.814], [0.289, 0.788]), aspect)).toBeLessThan(0.5);
+    expect(Math.abs(uprightness(at([0.4, 0.5], [0.5, 0.5]), aspect))).toBeLessThan(1e-9);
+  });
+
+  it('measures the angle in real proportions, not squashed image units', () => {
+    // 45° on screen: equal pixels across and up
+    close(uprightness(at([0.5, 0.5], [0.5 + 0.1 * aspect, 0.4]), aspect), Math.SQRT1_2);
+  });
+});

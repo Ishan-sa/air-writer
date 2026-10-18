@@ -6,6 +6,7 @@ import { drawHotTail, drawStroke } from './ink';
 import { applyGrab, canvasMatrix, grabTransform } from './transform';
 import { Sparks } from './sparks';
 import { Sfx } from './sfx';
+import { diag } from '../control/diag';
 import { addPoint, LazyBrush, smoothStroke, trimTail, type Stroke } from './strokes';
 
 const canvas = document.getElementById('wall') as HTMLCanvasElement;
@@ -109,11 +110,20 @@ function rebake() {
   strokes.forEach((s, i) => bake(s, widths[i] ?? 1));
 }
 
+/**
+ * Rounds off the stroke's corners. The Smoothing slider sets how much, all the
+ * way down to none at 0 (½ is the old fixed amount).
+ */
+function shape(s: Stroke): Stroke {
+  const sigma = 4 * settings.smoothing;
+  return sigma < 0.3 ? s : smoothStroke(s, Math.ceil(2 * sigma), sigma);
+}
+
 /** Renders a finished stroke via the scratch layer and adds it to the baked ink. */
 function bake(s: Stroke, width = 1) {
   bakedInk += inkLength(s);
   lctx.clearRect(0, 0, W, H);
-  drawStroke(lctx, smoothStroke(s), W, H, settings.thickness * width);
+  drawStroke(lctx, shape(s), W, H, settings.thickness * width);
   bctx.save();
   bctx.globalCompositeOperation = 'lighter';
   bctx.drawImage(liveLayer, 0, 0);
@@ -307,10 +317,10 @@ const channel = openChannel((msg: Msg) => {
       calib = { step: msg.step, corners: msg.corners };
       break;
     case 'settings': {
-      const thicknessChanged = msg.settings.thickness !== settings.thickness;
+      const reshape = msg.settings.thickness !== settings.thickness || msg.settings.smoothing !== settings.smoothing;
       settings = msg.settings;
       if (sfx) sfx.volume = settings.sfx;
-      if (thicknessChanged) rebake();
+      if (reshape) rebake();
       break;
     }
   }
@@ -320,7 +330,17 @@ const channel = openChannel((msg: Msg) => {
 
 let lastFrame = performance.now();
 
+/** Render cost, logged every 2 s (dev only) to find what slows the wall on real hardware. */
+const perf = { frames: 0, cost: 0, max: 0, parts: {} as Record<string, number>, since: performance.now() };
+let partAt = 0;
+function mark(name: string) {
+  const t = performance.now();
+  perf.parts[name] = (perf.parts[name] ?? 0) + t - partAt;
+  partAt = t;
+}
+
 function frame(now: number) {
+  const t0 = (partAt = performance.now());
   const dt = Math.min((now - lastFrame) / 1000, 0.05);
   lastFrame = now;
 
@@ -338,6 +358,7 @@ function frame(now: number) {
   const hf = hudFrame(now, dt);
   hud.update(hf);
   hud.drawBack(ctx, hf);
+  mark('back');
 
   // finished ink; during a wipe a bright bar sweeps across it and takes it away
   let wipeX: number | null = null;
@@ -373,10 +394,11 @@ function frame(now: number) {
   }
   if (wipeX !== null) hud.drawWipeBar(ctx, wipeX, H, u);
 
+  mark('ink');
   // live stroke
   if (live && live.length) {
     lctx.clearRect(0, 0, W, H);
-    const shaped = smoothStroke(live);
+    const shaped = shape(live);
     drawStroke(lctx, shaped, W, H, settings.thickness);
     drawHotTail(lctx, shaped, W, H, settings.thickness, now);
     ctx.globalCompositeOperation = 'lighter';
@@ -384,6 +406,7 @@ function frame(now: number) {
     ctx.globalCompositeOperation = 'source-over';
   }
 
+  mark('live');
   // sparks follow the pen tip while writing
   // while writing, the pen dot sits where the ink comes out
   const at = pen.down && inkAt ? inkAt : pen;
@@ -398,9 +421,20 @@ function frame(now: number) {
   dotAlpha += ((showDot ? 1 : 0) - dotAlpha) * Math.min(dt * 12, 1);
   if (dotAlpha > 0.01) drawDot(tip.x, tip.y, pen.down, dotAlpha, now);
 
-  hud.drawFront(ctx, { ...hf, tip }, grabBox());
+  mark('sparks');
+  hud.drawFront(ctx, { ...hf, tip }, grabBox(), mark);
   if (calib.step !== null) drawCalibration(now);
 
+  const cost = performance.now() - t0;
+  perf.frames++;
+  perf.cost += cost;
+  perf.max = Math.max(perf.max, cost);
+  if (now - perf.since > 2000) {
+    const n = perf.frames;
+    const parts = Object.fromEntries(Object.entries(perf.parts).map(([k, v]) => [k, +(v / n).toFixed(2)]));
+    diag({ k: 'wall', fps: +((n * 1000) / (now - perf.since)).toFixed(1), cost: +(perf.cost / n).toFixed(2), max: +perf.max.toFixed(1), parts, W, H, dpr: devicePixelRatio, cam: camera.ready, hud: settings.hud });
+    Object.assign(perf, { frames: 0, cost: 0, max: 0, parts: {}, since: now });
+  }
   requestAnimationFrame(frame);
 }
 
@@ -409,6 +443,7 @@ function hudMode(): HudMode {
   if (held) return 'grab';
   if (pen.down) return 'writing';
   const fresh = performance.now() - trackAt < 400;
+  if (fresh && track!.paused) return 'paused';
   return mouseMode || (fresh ? track!.armed : sessionLive) ? 'armed' : 'standby';
 }
 
@@ -433,6 +468,7 @@ function hudFrame(now: number, dt: number): HudFrame {
     showCam: settings.camInset,
     video: camera.ready ? camera.video : null,
     camLabel: camera.label,
+    soundOn: !!sfx || settings.sfx === 0,
   };
 }
 

@@ -83,6 +83,10 @@ The wall plays Iron Man–style sound effects: a repulsor charge when writing go
 
 Browsers only allow sound after you interact with a page, so **click the wall window once** (or press any key there) and it says *Sound on*. Set the volume, or turn sound off, with **Sound effects** under Tuning. To audition every sound, open `/sounds.html`.
 
+## Using the laptop between takes
+
+Tracking pauses on its own while you type, click or move the mouse in the control window, and starts again 3 seconds after you stop. If you're working in another app with your hands in the camera's view, press **S** in the control window (or on the wall) to keep tracking paused, and **S** again to resume. Starting also needs the palm held up, fingers pointing at the ceiling, so hands lying on a keyboard don't count as showing your palm.
+
 ## The heads-up display
 
 The wall wears a cyan heads-up display around the writing, so it looks alive on camera even before you write. Every number on it is real:
@@ -114,7 +118,7 @@ The control view starts in **Dark**: dim darkroom reds that won't light up your 
 
 | Slider | Turn it **up** if… | Turn it **down** if… |
 |---|---|---|
-| **Smoothing** | lines look shaky or jagged | the ink trails behind your hand |
+| **Smoothing** | lines look shaky or jagged | the ink trails behind your hand, or letters look rounded off (0 turns all smoothing off) |
 | **Ink thickness** | words are hard to read on the Reel | letters blob together |
 | **Sparks** | you want more sparkle | sparks distract from the words |
 | **Pinch sensitivity** (pinch mode) | strokes break while you're pinching | ink appears between letters when you didn't pinch |
@@ -144,6 +148,7 @@ The **Pinch** bar shows how closed your fingers are, and the white mark is where
 | Z | either | undo last stroke |
 | F / double-click | wall | full screen |
 | M | wall | mouse test mode (click and drag to draw) |
+| S | either | pause tracking (and resume), e.g. while you use the laptop |
 | H | either | show or hide the heads-up display |
 | V | either | show or hide the live camera on the wall |
 

@@ -61,6 +61,7 @@ export interface TrackInfo {
   wipe: number; // 0..1 while the wipe palm is held
   fps: number;
   ms: number; // time to track one frame
+  paused: boolean; // tracking paused while the laptop is in use
 }
 
 /** Messages between the control window (tracking) and the wall window (rendering). */

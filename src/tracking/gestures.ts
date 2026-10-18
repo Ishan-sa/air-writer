@@ -175,6 +175,21 @@ export class PointDetector {
 }
 
 /**
+ * How upright the hand stands in the camera image: 1 = fingers straight up,
+ * 0 = sideways, negative = pointing down. Measured along wrist → middle
+ * knuckle, in real proportions (`aspect` = frame height / width).
+ *
+ * A raised palm is upright (recorded starts: 0.86-1); hands typing on a
+ * laptop lie sideways (recorded: below 0.5), so this keeps typing from
+ * passing for "show your palm".
+ */
+export function uprightness(img: { x: number; y: number }[], aspect: number): number {
+  const dx = img[9].x - img[0].x, dy = (img[9].y - img[0].y) * aspect;
+  const len = Math.hypot(dx, dy);
+  return len < 1e-9 ? 0 : -dy / len;
+}
+
+/**
  * Strict open-palm check: all four fingers straight, thumb out, fingers spread.
  * Deliberately hard to trigger so a hand relaxing mid-word never wipes the wall.
  */

@@ -2,7 +2,7 @@ import { openChannel } from '../shared/channel';
 import { load, loadRaw, save } from '../shared/storage';
 import { DEFAULT_SETTINGS, type Msg, type Settings } from '../shared/types';
 import { Calibration } from '../tracking/calibration';
-import { flatPinchGap, fingerReach, handInFrame, indexTip, isHandOpen, isOpenPalm, penPoint, PinchDetector, pinchRatio, PointDetector, type Lm } from '../tracking/gestures';
+import { flatPinchGap, fingerReach, handInFrame, indexTip, isHandOpen, isOpenPalm, penPoint, PinchDetector, pinchRatio, PointDetector, uprightness, type Lm } from '../tracking/gestures';
 import { WriteSession } from '../tracking/session';
 import { TwoHandGrab } from '../tracking/grab';
 import type { Homography } from '../tracking/homography';
@@ -67,6 +67,19 @@ const HAND_LOST_MS = 150;
 // frames (recorded gaps: p90 ~200 ms, max ~480 ms); bridge those instead of ending the stroke
 const HAND_LOST_WRITING_MS = 350;
 
+/**
+ * Tracking pauses while you use the laptop, so hands on the keyboard don't
+ * start writing: for a few seconds after any key, click or mouse move in this
+ * window, and for as long as you like with S.
+ */
+let pausedByKey = false;
+let busyUntil = 0;
+const BUSY_MS = 3000;
+const trackingPaused = () => !calibration.active && (pausedByKey || performance.now() < busyUntil);
+['keydown', 'pointerdown', 'pointermove', 'wheel'].forEach((ev) =>
+  window.addEventListener(ev, () => (busyUntil = performance.now() + BUSY_MS), { capture: true, passive: true }),
+);
+
 // ---------------------------------------------------------------- channel to the wall
 
 let wallSeenAt = -Infinity;
@@ -120,6 +133,10 @@ function renderStatus() {
     [word, detail, level] = ['Loading', 'Starting the hand tracker.', 'idle'];
   } else if (cameraProblem) {
     [word, detail, level] = ['No camera', cameraProblem, 'problem'];
+  } else if (trackingPaused() && !calibration.active) {
+    [word, detail, level] = pausedByKey
+      ? ['Paused', 'Tracking is paused. Press S to start tracking again.', 'idle']
+      : ['Paused', 'Tracking pauses while you use this laptop, and starts again 3 seconds after you stop. Press S to keep it paused.', 'idle'];
   } else if (calibration.active) {
     word = CORNER_NAMES[calibration.step!];
     detail = `Move your hand to the ${word.toLowerCase()} corner of the area you’ll write in, then ${settings.penGesture === 'point' ? 'point' : 'pinch'} and hold for half a second. Corner ${calibration.step! + 1} of 4. Q or Esc cancels.`;
@@ -364,7 +381,10 @@ function handleKey(k: string) {
   else if (k === 'w') openWall();
   else if (k === 't') applyTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
   else if (k === 'p') setPenGesture(settings.penGesture === 'point' ? 'pinch' : 'point');
-  else if (k === 'h') toggleSetting('hud', 's-hud');
+  else if (k === 's') {
+    pausedByKey = !pausedByKey;
+    renderStatus();
+  } else if (k === 'h') toggleSetting('hud', 's-hud');
   else if (k === 'v') toggleSetting('camInset', 's-cam');
 }
 
@@ -520,6 +540,7 @@ function sendTrack(all: TrackedHand[], writer: TrackedHand | null, down: boolean
     wipe,
     fps: fpsNow,
     ms: detectMs,
+    paused: trackingPaused(),
   });
 }
 
@@ -546,6 +567,8 @@ function processFrame() {
     .map((img, i) => ({ img, world: res.worldLandmarks[i], label: res.handedness[i]?.[0]?.categoryName ?? '', score: res.handedness[i]?.[0]?.score ?? 0 }))
     .filter((h) => h.world);
   // a hand cut off by the frame edge gives garbage readings: treat it as no hand
+  // paused: act as if nobody is there (and draw no skeletons)
+  if (trackingPaused()) all.length = 0;
   const hands = all.filter((h) => handInFrame(h.img));
   if (all.length > hands.length && hands.length === 0) handAtEdgeAt = now;
   const writer = pickWriter(hands);
@@ -577,7 +600,9 @@ function processFrame() {
       onCalibEvent(calibration.update(raw, down, now));
       sendPen(lastPen.x, lastPen.y, false, false);
     } else {
-      const out = session.update({ present: true, palm: isOpenPalm(world), open: isHandOpen(world), pinch: down, wristX: img[0].x, twoHands: !!other }, now);
+      // a palm only counts held up: hands typing on a laptop lie sideways
+      const palm = isOpenPalm(world) && uprightness(img, aspect) >= 0.7;
+      const out = session.update({ present: true, palm, open: isHandOpen(world), pinch: down, wristX: img[0].x, twoHands: !!other }, now);
       onSessionEvent(out.event);
       startProgress = out.startProgress;
       wipeProgress = out.wipeProgress;
@@ -741,6 +766,7 @@ const probe = document.createElement('canvas');
 probe.width = 32;
 probe.height = 18;
 const pctx = probe.getContext('2d', { willReadFrequently: true })!;
+let lastCamFrames: number | undefined;
 setInterval(() => {
   const now = performance.now();
   const fps = (fpsNow = (fpsFrames * 1000) / (now - fpsSince));
@@ -753,9 +779,25 @@ setInterval(() => {
     let sum = 0;
     for (let i = 0; i < d.length; i += 4) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
     const luma = sum / (d.length / 4) / 255;
+    // the camera's own frame count, to tell a slow camera from a slow page
+    const track = (video.srcObject as MediaStream | null)?.getVideoTracks()[0] as (MediaStreamTrack & { stats?: { totalFrames?: number } }) | undefined;
+    const total = track?.stats?.totalFrames;
+    const camFps = total !== undefined && lastCamFrames !== undefined ? total - lastCamFrames : null;
+    lastCamFrames = total;
+    diag({ k: 'cam', fps: +fps.toFixed(1), camFps, vis: document.visibilityState, focus: document.hasFocus(), luma: +luma.toFixed(3), ms: +detectMs.toFixed(1) });
     const el = $('r-light');
-    const [text, cls] =
-      luma < 0.12
+    const slow = tracker && fps < 20;
+    const [text, cls] = slow
+      ? [
+          `Tracking slowed to ${fps.toFixed(0)} frames a second, so writing will lag. ` +
+            (document.visibilityState === 'hidden'
+              ? 'This window is hidden or covered: keep it visible on the laptop screen.'
+              : luma < 0.22
+                ? 'The room is too dark, so the iPhone slows its camera down. Add light on yourself.'
+                : 'Close other camera apps and heavy tabs.'),
+          'note bad',
+        ]
+      : luma < 0.12
         ? ['Too dark for tracking. Put a dim light on yourself from the wall side.', 'note bad']
         : luma < 0.22
           ? ['Light is dim. Tracking may drop out.', 'note']
