@@ -83,6 +83,20 @@ The wall plays Iron Man–style sound effects: a repulsor charge when writing go
 
 Browsers only allow sound after you interact with a page, so **click the wall window once** (or press any key there) and it says *Sound on*. Set the volume, or turn sound off, with **Sound effects** under Tuning. To audition every sound, open `/sounds.html`.
 
+## The heads-up display
+
+The wall wears a cyan heads-up display around the writing, so it looks alive on camera even before you write. Every number on it is real:
+
+- **Live camera** (top right): the tracking camera in monochrome cyan, with your hands' skeletons, a bracket around each hand, and the pen point lighting up orange while it writes. The wall opens the same camera as the control view, so nothing extra is needed. If the wall can't get the camera, it shows the skeletons alone.
+- **Status** (top left): Standby, Armed, Writing, Holding or Calibrating, plus how long the session has run.
+- **Readouts** (bottom left): tracking speed, hands and confidence, pen position, strokes and ink length, and a live graph of how fast the pen moves.
+- **Gestures** (bottom right): the gesture list, with the one you're doing lit up. In standby it only says how to start.
+- **On the wall**: a reticle follows your finger, rulers mark its position, and the grid lights up around your hand.
+
+It also animates the moments that matter. Brackets close in on your palm while you hold it up, then a scan line sweeps the wall and *Hand lock acquired* types out. A bright bar sweeps the ink off on a wipe. During a grab, brackets frame the writing and show its scale and rotation.
+
+**H** hides the display and **V** hides the camera, on either window. The same switches are under Tuning. Turn both off for a clean shot of just the ink.
+
 ## Hiding the projector's rectangle
 
 A projector can't project true black. Its "black" is dim light, so the whole projected area shows as a faint gray rectangle. Software can't draw darker than black, so hide it on the camera side:
@@ -94,7 +108,7 @@ A projector can't project true black. Its "black" is dim light, so the whole pro
 
 ## Light and dark
 
-The control view starts in **Dark**: dim darkroom reds that won't light up your scene or spill into the shot. Switch to **Light** while setting up with the room lights on, or pick **Auto** to follow your Mac's appearance. The switch sits at the bottom of the side panel, and **T** cycles through the three. The wall view is always black, because that's what the projector shows as "no light".
+The control view starts in **Dark**: dim darkroom reds that won't light up your scene or spill into the shot. Switch to **Light** while setting up with the room lights on, or pick **Auto** to follow your Mac's appearance. The switch sits at the bottom of the side panel, and **T** cycles through the three. The wall view is always black, because that's what the projector shows as "no light". Its heads-up display is always cyan, so the warm ink stands out.
 
 ## Tuning (control view → Tuning)
 
@@ -130,6 +144,8 @@ The **Pinch** bar shows how closed your fingers are, and the white mark is where
 | Z | either | undo last stroke |
 | F / double-click | wall | full screen |
 | M | wall | mouse test mode (click and drag to draw) |
+| H | either | show or hide the heads-up display |
+| V | either | show or hide the live camera on the wall |
 
 ## Development
 

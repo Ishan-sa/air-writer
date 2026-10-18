@@ -1,5 +1,7 @@
 import { openChannel } from '../shared/channel';
-import { DEFAULT_SETTINGS, type Msg, type Settings, type WallPoint } from '../shared/types';
+import { DEFAULT_SETTINGS, type Msg, type Settings, type TrackInfo, type WallPoint } from '../shared/types';
+import { WallCamera } from './camera';
+import { Hud, type GrabBox, type HudFrame, type HudMode } from './hud';
 import { drawHotTail, drawStroke } from './ink';
 import { applyGrab, canvasMatrix, grabTransform } from './transform';
 import { Sparks } from './sparks';
@@ -23,10 +25,12 @@ let strokes: Stroke[] = [];
 /** Line-width multiplier per finished stroke (grows and shrinks with two-hand resizes). */
 let widths: number[] = [];
 /** While both hands hold the writing: where they started and where they are now. */
-let held: { a0: WallPoint; b0: WallPoint; a: WallPoint; b: WallPoint } | null = null;
+let held: { a0: WallPoint; b0: WallPoint; a: WallPoint; b: WallPoint; box: Box | null } | null = null;
+interface Box { minX: number; minY: number; maxX: number; maxY: number }
 let live: Stroke | null = null;
-let wipeStart: number | null = null; // fade-out in progress
-const WIPE_MS = 500;
+let wipeStart: number | null = null; // the wipe sweep in progress
+let wipeBox: Box | null = null; // what it sweeps across
+const WIPE_MS = 600;
 const RELEASE_TRIM_MS = 70;
 const LOSS_TRIM_MS = 400;
 let igniting = false;
@@ -50,6 +54,13 @@ let dotAlpha = 0;
 let calib: { step: number | null; corners: WallPoint[] } = { step: null, corners: [] };
 let mouseMode = false;
 const sparks = new Sparks();
+const hud = new Hud();
+const camera = new WallCamera();
+let track: TrackInfo | null = null;
+let trackAt = -Infinity;
+let sessionLive = false;
+/** Total ink length in 1080p px, for the readout: finished strokes, plus the live one each frame. */
+let bakedInk = 0;
 
 // Browsers only allow audio after the viewer interacts with the page, so the
 // sound engine starts on the first click or key press in the wall window.
@@ -94,11 +105,13 @@ watchPixelRatio();
 
 function rebake() {
   bctx.clearRect(0, 0, W, H);
+  bakedInk = 0;
   strokes.forEach((s, i) => bake(s, widths[i] ?? 1));
 }
 
 /** Renders a finished stroke via the scratch layer and adds it to the baked ink. */
 function bake(s: Stroke, width = 1) {
+  bakedInk += inkLength(s);
   lctx.clearRect(0, 0, W, H);
   drawStroke(lctx, smoothStroke(s), W, H, settings.thickness * width);
   bctx.save();
@@ -106,6 +119,28 @@ function bake(s: Stroke, width = 1) {
   bctx.drawImage(liveLayer, 0, 0);
   bctx.restore();
   lctx.clearRect(0, 0, W, H);
+}
+
+function inkLength(s: Stroke) {
+  const aspect = W / H;
+  let len = 0;
+  for (let i = 1; i < s.length; i++) len += Math.hypot((s[i].x - s[i - 1].x) * aspect, s[i].y - s[i - 1].y);
+  return len * 1080;
+}
+
+/** The bounding box of all finished ink, in wall coords. */
+function inkBox(): Box | null {
+  if (!strokes.length) return null;
+  const b = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  for (const s of strokes) {
+    for (const p of s) {
+      b.minX = Math.min(b.minX, p.x);
+      b.minY = Math.min(b.minY, p.y);
+      b.maxX = Math.max(b.maxX, p.x);
+      b.maxY = Math.max(b.maxY, p.y);
+    }
+  }
+  return b;
 }
 
 // ---------------------------------------------------------------- ink state
@@ -200,6 +235,7 @@ function clearWall() {
   endStroke();
   if (strokes.length === 0) return;
   sfx?.wipe();
+  wipeBox = inkBox();
   wipeStart = performance.now();
 }
 
@@ -231,7 +267,7 @@ const channel = openChannel((msg: Msg) => {
     case 'grab':
       if (msg.phase === 'start' && msg.a && msg.b) {
         endStroke();
-        held = { a0: msg.a, b0: msg.b, a: msg.a, b: msg.b };
+        held = { a0: msg.a, b0: msg.b, a: msg.a, b: msg.b, box: inkBox() };
         sfx?.blip();
       } else if (msg.phase === 'move' && held && msg.a && msg.b) {
         held.a = msg.a;
@@ -241,16 +277,26 @@ const channel = openChannel((msg: Msg) => {
       }
       break;
     case 'session':
+      sessionLive = msg.live;
       if (msg.live) {
         sfx?.start();
         igniting = true; // burst of sparks where the pen first appears
+        hud.boot(performance.now());
       } else {
         sfx?.stop();
         endStroke();
+        hud.shutdown(performance.now());
       }
       break;
     case 'clear':
       clearWall();
+      break;
+    case 'track':
+      track = msg;
+      trackAt = performance.now();
+      break;
+    case 'camera':
+      camera.open(msg.deviceId, msg.label);
       break;
     case 'undo':
       undo();
@@ -289,15 +335,31 @@ function frame(now: number) {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
 
-  // finished ink (fading out during a wipe)
-  let inkAlpha = 1;
+  const hf = hudFrame(now, dt);
+  hud.update(hf);
+  hud.drawBack(ctx, hf);
+
+  // finished ink; during a wipe a bright bar sweeps across it and takes it away
+  let wipeX: number | null = null;
   if (wipeStart !== null) {
     const k = (now - wipeStart) / WIPE_MS;
     if (k >= 1) finishWipe();
-    else inkAlpha = 1 - k * k;
+    else {
+      const b = wipeBox ?? { minX: 0, maxX: 1, minY: 0, maxY: 1 };
+      const from = b.minX * W - 60 * u, to = b.maxX * W + 60 * u;
+      const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      wipeX = from + (to - from) * e;
+      // the ink burns off where the bar passes
+      for (let i = 0; i < 3; i++) sparks.burst(wipeX, (b.minY + Math.random() * (b.maxY - b.minY)) * H, 2, u);
+    }
   }
   if (wipeStart !== null || strokes.length) {
-    ctx.globalAlpha = inkAlpha;
+    ctx.save();
+    if (wipeX !== null) {
+      ctx.beginPath();
+      ctx.rect(wipeX, 0, W - wipeX, H);
+      ctx.clip();
+    }
     if (held) {
       // while held, move the already-drawn ink as one picture (fast); it's
       // re-drawn crisp from the moved strokes when the hands let go
@@ -307,8 +369,9 @@ function frame(now: number) {
     } else {
       ctx.drawImage(baked, 0, 0);
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
   }
+  if (wipeX !== null) hud.drawWipeBar(ctx, wipeX, H, u);
 
   // live stroke
   if (live && live.length) {
@@ -335,10 +398,61 @@ function frame(now: number) {
   dotAlpha += ((showDot ? 1 : 0) - dotAlpha) * Math.min(dt * 12, 1);
   if (dotAlpha > 0.01) drawDot(tip.x, tip.y, pen.down, dotAlpha, now);
 
-  if (held) drawHands(now);
+  hud.drawFront(ctx, { ...hf, tip }, grabBox());
   if (calib.step !== null) drawCalibration(now);
 
   requestAnimationFrame(frame);
+}
+
+function hudMode(): HudMode {
+  if (calib.step !== null) return 'calib';
+  if (held) return 'grab';
+  if (pen.down) return 'writing';
+  const fresh = performance.now() - trackAt < 400;
+  return mouseMode || (fresh ? track!.armed : sessionLive) ? 'armed' : 'standby';
+}
+
+function hudFrame(now: number, dt: number): HudFrame {
+  const at = pen.down && inkAt ? inkAt : pen;
+  return {
+    now,
+    dt,
+    W,
+    H,
+    u,
+    mode: hudMode(),
+    track: now - trackAt < 400 ? track : null,
+    tip: { x: at.x * W, y: at.y * H },
+    pen: { x: at.x, y: at.y },
+    penAlpha: dotAlpha,
+    down: pen.down,
+    strokes: strokes.length + (live ? 1 : 0),
+    inkPx: bakedInk + (live ? inkLength(live) : 0),
+    mirror: settings.mirror,
+    showHud: settings.hud,
+    showCam: settings.camInset,
+    video: camera.ready ? camera.video : null,
+    camLabel: camera.label,
+  };
+}
+
+/** Where the held writing is right now, for the grab overlay. */
+function grabBox(): GrabBox | null {
+  if (!held) return null;
+  const aspect = W / H;
+  const T = grabTransform(held.a0, held.b0, held.a, held.b, aspect);
+  const px = (p: WallPoint) => ({ x: p.x * W, y: p.y * H });
+  const b = held.box;
+  const pad = 0.015;
+  const corners = b
+    ? [
+        { x: b.minX - pad / aspect, y: b.minY - pad },
+        { x: b.maxX + pad / aspect, y: b.minY - pad },
+        { x: b.maxX + pad / aspect, y: b.maxY + pad },
+        { x: b.minX - pad / aspect, y: b.maxY + pad },
+      ].map((c) => px(applyGrab(T, c, aspect)))
+    : [];
+  return { corners, a: px(held.a), b: px(held.b), scale: T.scale, degrees: (Math.atan2(T.sin, T.cos) * 180) / Math.PI };
 }
 
 function drawDot(x: number, y: number, down: boolean, alpha: number, now: number) {
@@ -365,31 +479,6 @@ function drawDot(x: number, y: number, down: boolean, alpha: number, now: number
   ctx.restore();
 }
 
-/** A glowing ring at each hand while it holds the writing. */
-function drawHands(now: number) {
-  if (!held) return;
-  const pulse = 0.85 + 0.15 * Math.sin(now / 160);
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  for (const p of [held.a, held.b]) {
-    const x = p.x * W, y = p.y * H, r = 34 * u * pulse;
-    const g = ctx.createRadialGradient(x, y, r * 0.55, x, y, r * 1.6);
-    g.addColorStop(0, 'rgba(255, 179, 71, 0)');
-    g.addColorStop(0.35, 'rgba(255, 160, 50, 0.35)');
-    g.addColorStop(1, 'rgba(255, 94, 0, 0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 220, 160, 0.85)';
-    ctx.lineWidth = 2.5 * u;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
 function drawCalibration(now: number) {
   const pulse = 0.5 + 0.5 * Math.sin(now / 220);
   ctx.save();
@@ -397,25 +486,25 @@ function drawCalibration(now: number) {
     const x = c.x * W, y = c.y * H;
     const active = i === calib.step;
     const done = calib.step !== null && i < calib.step;
-    ctx.strokeStyle = active ? `rgba(255, 200, 110, ${0.6 + 0.4 * pulse})` : done ? 'rgba(255,179,71,0.55)' : 'rgba(255,179,71,0.18)';
+    ctx.strokeStyle = active ? `rgba(214, 248, 255, ${0.6 + 0.4 * pulse})` : done ? 'rgba(120,228,255,0.55)' : 'rgba(120,228,255,0.18)';
     ctx.lineWidth = (active ? 3 : 2) * u;
     ctx.beginPath();
     ctx.arc(x, y, (active ? 28 + 8 * pulse : 18) * u, 0, Math.PI * 2);
     ctx.stroke();
     if (active || done) {
-      ctx.fillStyle = active ? '#fffaf0' : 'rgba(255,179,71,0.7)';
+      ctx.fillStyle = active ? '#fffaf0' : 'rgba(120,228,255,0.7)';
       ctx.beginPath();
       ctx.arc(x, y, 5 * u, 0, Math.PI * 2);
       ctx.fill();
     }
     if (active) {
-      ctx.fillStyle = 'rgba(255, 220, 160, 0.9)';
-      ctx.font = `500 ${22 * u}px -apple-system, system-ui, sans-serif`;
+      ctx.fillStyle = 'rgba(214, 248, 255, 0.95)';
+      ctx.font = `600 ${18 * u}px ui-monospace, "SF Mono", Menlo, monospace`;
       ctx.textAlign = c.x < 0.5 ? 'left' : 'right';
       ctx.textBaseline = 'middle';
       const tx = x + (c.x < 0.5 ? 52 : -52) * u;
       const ty = y + (c.y < 0.5 ? 56 : -56) * u;
-      ctx.fillText(`Move your hand here and ${settings.penGesture === 'point' ? 'point' : 'pinch'}  ·  ${i + 1} of 4`, tx, ty);
+      ctx.fillText(`MOVE YOUR HAND HERE AND ${settings.penGesture === 'point' ? 'POINT' : 'PINCH'}  ·  ${i + 1} OF 4`, tx, ty);
     }
   });
   ctx.restore();
@@ -493,8 +582,8 @@ resize();
 showCursor();
 channel.send({ type: 'hello' });
 setInterval(() => channel.send({ type: 'hello' }), 2000); // heartbeat so the control view knows the wall is open
-toast('Air Writer wall\nClick once to turn on sound  ·  F or double-click for full screen  ·  M mouse test mode  ·  Q cancels calibration', 4000);
+toast('Air Writer wall\nClick once to turn on sound  ·  F or double-click for full screen  ·  H display  ·  V camera  ·  M mouse test mode', 4000);
 requestAnimationFrame(frame);
 
 // for debugging from the console
-Object.assign(window, { airWriterWall: { penInput, clearWall, undo, get strokes() { return strokes; } } });
+Object.assign(window, { airWriterWall: { penInput, clearWall, undo, camera, get strokes() { return strokes; } } });
