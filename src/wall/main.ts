@@ -4,7 +4,7 @@ import { drawHotTail, drawStroke } from './ink';
 import { applyGrab, canvasMatrix, grabTransform } from './transform';
 import { Sparks } from './sparks';
 import { Sfx } from './sfx';
-import { addPoint, smoothStroke, trimTail, type Stroke } from './strokes';
+import { addPoint, LazyBrush, smoothStroke, trimTail, type Stroke } from './strokes';
 
 const canvas = document.getElementById('wall') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -119,6 +119,9 @@ const MAX_JUMP = 0.2;
 const STITCH_MS = 150;
 const STITCH_DIST = 0.04;
 let lifted: { upAt: number } | null = null;
+const brush = new LazyBrush(0.01);
+/** Where the ink is being laid down right now (behind the hand by the string length). */
+let inkAt: WallPoint | null = null;
 
 /** `t` is this window's clock: stamped on arrival so it matches the render loop's clock. */
 function penInput(x: number, y: number, down: boolean, visible: boolean, t: number) {
@@ -147,8 +150,17 @@ function penInput(x: number, y: number, down: boolean, visible: boolean, t: numb
       if (t - lifted.upAt < STITCH_MS && near) lifted = null; // a flicker: keep going
       else endStroke(lifted.upAt);
     }
-    if (!live) live = [];
-    addPoint(live, { x, y, t });
+    // the ink hangs behind the hand on a short string (see LazyBrush), worked out
+    // in real wall proportions so the string is the same length in every direction
+    const aspect = W / H;
+    brush.radius = 0.02 * settings.smoothing; // a fraction of the wall height
+    if (!live) {
+      live = [];
+      brush.reset({ x: x * aspect, y });
+    }
+    const b = brush.follow({ x: x * aspect, y });
+    inkAt = { x: b.x / aspect, y: b.y };
+    addPoint(live, { x: inkAt.x, y: inkAt.y, t });
   } else if (!visible) {
     // pen up because the hand left view (lowered while still pinched): drop the
     // tail it drew on the way down
@@ -161,6 +173,7 @@ function penInput(x: number, y: number, down: boolean, visible: boolean, t: numb
 
 function endStroke(upAt?: number, trimMs = RELEASE_TRIM_MS) {
   lifted = null;
+  inkAt = null;
   if (!live) return;
   const done = trimTail(live, trimMs, upAt);
   live = null;
@@ -307,7 +320,9 @@ function frame(now: number) {
   }
 
   // sparks follow the pen tip while writing
-  const tip = { x: pen.x * W, y: pen.y * H };
+  // while writing, the pen dot sits where the ink comes out
+  const at = pen.down && inkAt ? inkAt : pen;
+  const tip = { x: at.x * W, y: at.y * H };
   if (pen.down && prevTip) sparks.emit(prevTip.x, prevTip.y, tip.x, tip.y, dt, settings.sparks, u);
   prevTip = pen.down ? tip : null;
   sparks.update(dt, u);

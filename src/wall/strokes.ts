@@ -54,3 +54,30 @@ export function smoothStroke(stroke: Stroke, radius = 4, sigma = 2): Stroke {
     return { x: x / w, y: y / w, t: p.t };
   });
 }
+
+/**
+ * A "lazy brush" stabilizer, the trick drawing apps use to feel smooth: the
+ * ink point hangs behind the hand on an invisible string of length `radius`.
+ * Movement inside the string's length (tracking wobble) doesn't move the ink
+ * at all; real movement drags it along on a smooth path. The cost is that the
+ * ink trails the hand by the string length.
+ */
+export class LazyBrush {
+  private pos = { x: 0, y: 0 };
+
+  constructor(public radius: number) {}
+
+  reset(p: { x: number; y: number }) {
+    this.pos = { x: p.x, y: p.y };
+  }
+
+  follow(hand: { x: number; y: number }): { x: number; y: number } {
+    const dx = hand.x - this.pos.x, dy = hand.y - this.pos.y;
+    const d = Math.hypot(dx, dy);
+    if (d > this.radius) {
+      const k = (d - this.radius) / d;
+      this.pos = { x: this.pos.x + dx * k, y: this.pos.y + dy * k };
+    }
+    return { x: this.pos.x, y: this.pos.y };
+  }
+}

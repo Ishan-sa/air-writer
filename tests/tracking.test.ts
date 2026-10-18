@@ -3,7 +3,7 @@ import { applyHomography, computeHomography, isUsableQuad } from '../src/trackin
 import { OneEuroFilter, PointFilter } from '../src/tracking/oneEuro';
 import { fingerReach, handInFrame, isOpenPalm, PalmHold, PinchDetector, pinchRatio, PointDetector, type Lm } from '../src/tracking/gestures';
 import { CALIB_CORNERS, cameraToWall, defaultMap } from '../src/tracking/mapping';
-import { addPoint, smoothStroke, trimTail, type Stroke } from '../src/wall/strokes';
+import { addPoint, LazyBrush, smoothStroke, trimTail, type Stroke } from '../src/wall/strokes';
 
 const close = (a: number, b: number, eps = 1e-6) => expect(Math.abs(a - b)).toBeLessThan(eps);
 
@@ -181,6 +181,22 @@ describe('pointing (index out, other fingers curled)', () => {
       expect(d.update(lift)).toBe(true);
       expect(d.update(lift)).toBe(false);
     }
+  });
+
+  it('stays down when the index reading wobbles to ~1.05-1.1 but the other fingers stay curled (recorded)', () => {
+    // build a pointing hand, then shorten the index fingertip so its reach reads ~1.05
+    const wobble = () => {
+      const h = hand({ point: true });
+      h[8] = { x: h[8].x, y: -0.126, z: 0 }; // tip barely past the middle joint
+      return h;
+    };
+    expect(fingerReach(wobble()).index).toBeGreaterThan(0.95);
+    expect(fingerReach(wobble()).index).toBeLessThan(1.1);
+    const d = new PointDetector();
+    d.update(hand({ point: true }));
+    d.update(hand({ point: true }));
+    const states = Array.from({ length: 6 }, () => d.update(wobble()));
+    expect(states.every(Boolean)).toBe(true);
   });
 
   it('a one-frame wobble mid-stroke does not lift the pen', () => {
@@ -396,6 +412,45 @@ describe('stroke smoothing', () => {
   it('leaves short strokes alone', () => {
     const s: Stroke = [{ x: 0, y: 0, t: 0 }, { x: 0.01, y: 0.01, t: 17 }];
     expect(smoothStroke(s)).toEqual(s);
+  });
+});
+
+describe('string stabilizer (lazy brush)', () => {
+  const R = 0.01;
+
+  it('ignores wobble shorter than the string', () => {
+    const b = new LazyBrush(R);
+    b.reset({ x: 0.5, y: 0.5 });
+    for (let i = 0; i < 50; i++) {
+      // recorded-size wobble: a few pixels around a resting finger
+      const p = b.follow({ x: 0.5 + (Math.random() - 0.5) * 0.008, y: 0.5 + (Math.random() - 0.5) * 0.008 });
+      expect(p.x).toBe(0.5);
+      expect(p.y).toBe(0.5);
+    }
+  });
+
+  it('is dragged along by real movement, trailing by the string length', () => {
+    const b = new LazyBrush(R);
+    b.reset({ x: 0.2, y: 0.5 });
+    let p = { x: 0.2, y: 0.5 };
+    for (let i = 1; i <= 40; i++) p = b.follow({ x: 0.2 + i * 0.01, y: 0.5 });
+    expect(p.y).toBeCloseTo(0.5, 9);
+    expect(0.6 - p.x).toBeCloseTo(R, 9);
+  });
+
+  it('smooths a shaky line far more than the shake itself', () => {
+    const b = new LazyBrush(R);
+    b.reset({ x: 0.2, y: 0.5 });
+    const ys: number[] = [];
+    for (let i = 1; i <= 80; i++) ys.push(b.follow({ x: 0.2 + i * 0.005, y: 0.5 + (i % 2 ? 0.004 : -0.004) }).y);
+    const spread = Math.max(...ys.slice(10)) - Math.min(...ys.slice(10));
+    expect(spread).toBeLessThan(0.008 * 0.25);
+  });
+
+  it('with no string it follows exactly', () => {
+    const b = new LazyBrush(0);
+    b.reset({ x: 0, y: 0 });
+    expect(b.follow({ x: 0.3, y: 0.4 })).toEqual({ x: 0.3, y: 0.4 });
   });
 });
 

@@ -23,7 +23,8 @@ const cameraMsg = $('camera-msg');
 let settings: Settings = load('settings-v2', DEFAULT_SETTINGS);
 // v2: calibrations made with the old perspective fit are discarded (they could flip ink)
 // each pen gesture keeps its own calibration: the pen sits on a different spot of the hand
-const calibKey = () => (settings.penGesture === 'point' ? 'homography-v2-point' : 'homography-v2');
+// (v3-point: the pointing pen moved from the fingertip to fingertip+joint, so older point calibrations are dropped)
+const calibKey = () => (settings.penGesture === 'point' ? 'homography-v3-point' : 'homography-v2');
 let H: Homography | null = loadRaw<Homography>(calibKey());
 
 const pinch = new PinchDetector();

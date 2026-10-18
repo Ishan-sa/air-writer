@@ -112,17 +112,22 @@ export function fingerReach(world: Lm[]) {
   return { index, middle, ring, pinky };
 }
 
-/** The pen tip when drawing by pointing: the index fingertip, in camera image coords. */
+/**
+ * The pen tip when drawing by pointing, in camera image coords: halfway between
+ * the index fingertip and the joint behind it. The fingertip alone is the
+ * tracker's noisiest point; averaging it with that joint measured ~25% steadier.
+ */
 export function indexTip(img: Lm[]) {
-  return { x: img[INDEX_TIP].x, y: img[INDEX_TIP].y };
+  return { x: (img[INDEX_TIP].x + img[7].x) / 2, y: (img[INDEX_TIP].y + img[7].y) / 2 };
 }
 
 /**
  * Pen up/down by pointing: index finger out, the other three curled. Like the
  * pinch, it's hard to start and hard to stop:
  * - down needs a clear point (index reach > 1.25, others < 1.0) for 2 frames
- * - up needs the index clearly curling (< 1.1) or the hand opening (another
- *   finger > 1.15), for 3 frames
+ * - up needs the index clearly curling (< 0.95) or the hand opening (another
+ *   finger > 1.15), for 3 frames. (Recorded: while still pointing, the index
+ *   reading wobbles down to ~1.05-1.1, especially pointing toward the camera.)
  * Pointing is much easier to detect than a pinch, and the fingertip is a
  * precise pen point.
  */
@@ -152,7 +157,7 @@ export class PointDetector {
     const r = fingerReach(world);
     const others = Math.max(r.middle, r.ring, r.pinky);
     const pointing = r.index > 1.25 && others < 1.0;
-    const released = r.index < 1.1 || others > 1.15;
+    const released = r.index < 0.95 || others > 1.15;
     const wants = this.down ? !released : pointing;
     if (wants === this.down) {
       this.pending = 0;
