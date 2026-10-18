@@ -122,12 +122,16 @@ export function indexTip(img: Lm[]) {
 }
 
 /**
- * Pen up/down by pointing: index finger out, the other three curled. Like the
- * pinch, it's hard to start and hard to stop:
+ * Pen up/down by pointing: index finger out, the other three curled.
  * - down needs a clear point (index reach > 1.25, others < 1.0) for 2 frames
- * - up needs the index clearly curling (< 0.95) or the hand opening (another
- *   finger > 1.15), for 3 frames. (Recorded: while still pointing, the index
- *   reading wobbles down to ~1.05-1.1, especially pointing toward the camera.)
+ * - up, also within 2 frames, on any of:
+ *   - two fingers up: the middle finger raised next to the index (> 1.1). The
+ *     everyday lift between letters: distinct, quick, and it doesn't move the
+ *     index fingertip, so no tails. (Recorded: middle reads 0.64-0.83 while
+ *     pointing, ~1.3 when raised.)
+ *   - the index clearly curling (< 0.95). (While still pointing it wobbles
+ *     down to ~1.05-1.1, so the margin matters.)
+ *   - the hand opening (ring or pinky > 1.15)
  * Pointing is much easier to detect than a pinch, and the fingertip is a
  * precise pen point.
  */
@@ -137,7 +141,7 @@ export class PointDetector {
 
   constructor(
     public confirmFrames = 2,
-    public releaseFrames = 3,
+    public releaseFrames = 2,
   ) {}
 
   reset() {
@@ -157,7 +161,7 @@ export class PointDetector {
     const r = fingerReach(world);
     const others = Math.max(r.middle, r.ring, r.pinky);
     const pointing = r.index > 1.25 && others < 1.0;
-    const released = r.index < 0.95 || others > 1.15;
+    const released = r.index < 0.95 || r.middle > 1.1 || Math.max(r.ring, r.pinky) > 1.15;
     const wants = this.down ? !released : pointing;
     if (wants === this.down) {
       this.pending = 0;

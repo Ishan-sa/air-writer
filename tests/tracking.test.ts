@@ -125,7 +125,7 @@ describe('one euro filter', () => {
 });
 
 /** Builds world landmarks for a hand: 21 points, metres-ish scale. */
-function hand(opts: { pinch?: boolean; open?: boolean; point?: boolean }): Lm[] {
+function hand(opts: { pinch?: boolean; open?: boolean; point?: boolean; two?: boolean }): Lm[] {
   const lm: Lm[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
   const set = (i: number, x: number, y: number) => (lm[i] = { x, y, z: 0 });
   set(0, 0, 0); // wrist
@@ -141,7 +141,7 @@ function hand(opts: { pinch?: boolean; open?: boolean; point?: boolean }): Lm[] 
     [14, 16],
     [18, 20],
   ].forEach(([pip, tip], k) => {
-    const straight = !curled || (opts.point && k === 0);
+    const straight = !curled || ((opts.point || opts.two) && k === 0) || (opts.two && k === 1);
     set(pip, fingerX[k], -0.12);
     set(tip, fingerX[k] * (opts.open ? 1.3 : 1), straight ? -0.17 : -0.1);
   });
@@ -172,12 +172,11 @@ describe('pointing (index out, other fingers curled)', () => {
     }
   });
 
-  it('opening the hand or curling the index finger lifts the pen, after three frames', () => {
+  it('opening the hand or curling the index finger lifts the pen, after two frames', () => {
     for (const lift of [hand({ open: true }), hand({})]) {
       const d = new PointDetector();
       d.update(hand({ point: true }));
       d.update(hand({ point: true }));
-      expect(d.update(lift)).toBe(true);
       expect(d.update(lift)).toBe(true);
       expect(d.update(lift)).toBe(false);
     }
@@ -197,6 +196,33 @@ describe('pointing (index out, other fingers curled)', () => {
     d.update(hand({ point: true }));
     const states = Array.from({ length: 6 }, () => d.update(wobble()));
     expect(states.every(Boolean)).toBe(true);
+  });
+
+  it('raising the middle finger next to the index (two fingers up) lifts the pen within two frames', () => {
+    const d = new PointDetector();
+    d.update(hand({ point: true }));
+    d.update(hand({ point: true }));
+    expect(fingerReach(hand({ two: true })).middle).toBeGreaterThan(1.1);
+    expect(d.update(hand({ two: true }))).toBe(true);
+    expect(d.update(hand({ two: true }))).toBe(false);
+  });
+
+  it('two fingers up never starts writing; dropping the middle finger does', () => {
+    const d = new PointDetector();
+    [1, 2, 3, 4].forEach(() => d.update(hand({ two: true })));
+    expect(d.down).toBe(false);
+    d.update(hand({ point: true }));
+    expect(d.update(hand({ point: true }))).toBe(true);
+  });
+
+  it('a curled middle finger reading up to ~0.85 while pointing stays down (recorded 0.64-0.83)', () => {
+    const d = new PointDetector();
+    d.update(hand({ point: true }));
+    d.update(hand({ point: true }));
+    const h = hand({ point: true });
+    h[12] = { x: h[12].x, y: -0.102, z: 0 }; // middle tip a little further out than fully curled
+    expect(fingerReach(h).middle).toBeLessThan(0.9);
+    expect([1, 2, 3, 4].map(() => d.update(h)).every(Boolean)).toBe(true);
   });
 
   it('a one-frame wobble mid-stroke does not lift the pen', () => {

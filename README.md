@@ -67,7 +67,7 @@ Order: top-left, top-right, bottom-right, bottom-left. After the fourth, the con
 ### 6. Do a test word, then shoot
 
 1. **Start: hold an open palm toward the camera for about half a second.** Until then, a hand in view does nothing. When it goes live, the pen dot ignites on the wall with a burst of sparks. The *Start hold* bar fills up as you hold.
-2. **Write: point your index finger** (other fingers curled) to draw. The pen is your fingertip. **Curl the finger or open your hand** to lift the pen between letters. Prefer pinching? Switch *Draw with* to **Pinch** under Tuning, or press **P**.
+2. **Write: point your index finger** (other fingers curled) to draw. The pen is your fingertip. **Lift between letters by raising your middle finger too** (two fingers up ✌️). The dot keeps following so you can aim the next letter; drop the middle finger to write again. Curling the finger or opening your hand also lifts. Prefer pinching? Switch *Draw with* to **Pinch** under Tuning, or press **P**.
 3. **Wipe: swipe an open hand sideways**, like wiping a board.
 4. **Move it: raise both open hands.** After a moment the writing is grabbed, with a glowing ring at each hand. Slide your hands to move it, twist them to rotate it, and spread them apart or bring them together to resize it. Drop or close either hand to let go. While both hands are up, erasing is switched off.
 5. **Stop: lower your hand out of the camera's view for about a second.** Show your palm again to start the next take.

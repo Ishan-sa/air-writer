@@ -113,11 +113,13 @@ function bake(s: Stroke, width = 1) {
 /** A jump bigger than this in one frame (e.g. tracking hopping to the other hand) starts a new stroke. */
 const MAX_JUMP = 0.2;
 /**
- * A pen lift shorter than this, landing back near where it lifted, continues
- * the same stroke: fast strokes sometimes flicker open for a frame or two.
+ * A pen lift shorter than this, landing back right where it lifted, continues
+ * the same stroke: tracking sometimes flickers for a frame or two. Kept tight
+ * because real lifts between letters are quick too (recorded: 65-175 ms), and
+ * a looser stitch joined letters that were meant to be separate.
  */
-const STITCH_MS = 150;
-const STITCH_DIST = 0.04;
+const STITCH_MS = 80;
+const STITCH_DIST = 0.02;
 let lifted: { upAt: number } | null = null;
 const brush = new LazyBrush(0.01);
 /** Where the ink is being laid down right now (behind the hand by the string length). */

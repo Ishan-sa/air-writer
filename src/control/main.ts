@@ -121,10 +121,10 @@ function renderStatus() {
   } else if (session.armed && live.hand && live.wipe > 0.05) {
     [word, detail, level] = ['Wiping', 'Keep your palm up to clear the wall.', 'guide'];
   } else if (session.armed && live.hand && live.down) {
-    [word, detail, level] = ['Writing', settings.penGesture === 'point' ? 'Curl your finger or open your hand to lift the pen.' : 'Open your fingers to lift the pen.', 'live'];
+    [word, detail, level] = ['Writing', settings.penGesture === 'point' ? 'Raise your middle finger too (two fingers up) to lift the pen between letters.' : 'Open your fingers to lift the pen.', 'live'];
   } else if (session.armed) {
     const wipe = (settings.swipeWipe ? ' Hold up an open palm, or swipe, to wipe.' : ' Hold up an open palm to wipe.') + ' Raise both open hands to move the writing.';
-    [word, detail, level] = ['Ready', `${settings.penGesture === 'point' ? 'Point your index finger' : 'Pinch'} to write.${wipe} Lower your hand to stop. ${setupSentence()}`, 'ready'];
+    [word, detail, level] = ['Ready', `${settings.penGesture === 'point' ? 'Point your index finger to write, two fingers up to lift.' : 'Pinch to write.'}${wipe} Lower your hand to stop. ${setupSentence()}`, 'ready'];
   } else if (live.hand && live.start > 0.05) {
     [word, detail, level] = ['Starting', 'Keep your palm open…', 'guide'];
   } else if (live.hand) {
