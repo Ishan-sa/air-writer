@@ -45,6 +45,7 @@ interface TrackedHand {
   img: Lm[];
   world: Lm[];
   label: string;
+  score: number;
 }
 
 /** With two hands in view, the writing hand is the one that wrote last (by label, then by position). */
@@ -81,6 +82,13 @@ const channel = openChannel((msg: Msg) => {
 function pushState() {
   channel.send({ type: 'settings', settings });
   channel.send({ type: 'calib', step: calibration.step, corners: CALIB_CORNERS });
+  sendCamera();
+}
+
+/** The wall opens the same camera for its live view. */
+function sendCamera() {
+  const track = (video.srcObject as MediaStream | null)?.getVideoTracks()[0];
+  channel.send({ type: 'camera', deviceId: track?.getSettings().deviceId ?? null, label: track?.label ?? '' });
 }
 
 const wallConnected = () => performance.now() - wallSeenAt < 3500;
@@ -177,7 +185,7 @@ bindSlider('s-sparks', 'sparks', times);
 bindSlider('s-pinch', 'pinchDown', (v) => v.toFixed(2));
 bindSlider('s-sfx', 'sfx', (v) => (v === 0 ? 'off' : pct(v)));
 
-function bindCheck(id: string, key: 'mirror' | 'swipeWipe') {
+function bindCheck(id: string, key: 'mirror' | 'swipeWipe' | 'hud' | 'camInset') {
   const input = $<HTMLInputElement>(id);
   input.checked = settings[key];
   input.addEventListener('change', () => {
@@ -187,6 +195,14 @@ function bindCheck(id: string, key: 'mirror' | 'swipeWipe') {
 }
 bindCheck('s-mirror', 'mirror');
 bindCheck('s-swipe', 'swipeWipe');
+bindCheck('s-hud', 'hud');
+bindCheck('s-cam', 'camInset');
+
+function toggleSetting(key: 'hud' | 'camInset', id: string) {
+  settings = { ...settings, [key]: !settings[key] };
+  $<HTMLInputElement>(id).checked = settings[key];
+  applySettings();
+}
 applySettings();
 
 // ---------------------------------------------------------------- calibration UI
@@ -348,6 +364,8 @@ function handleKey(k: string) {
   else if (k === 'w') openWall();
   else if (k === 't') applyTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
   else if (k === 'p') setPenGesture(settings.penGesture === 'point' ? 'pinch' : 'point');
+  else if (k === 'h') toggleSetting('hud', 's-hud');
+  else if (k === 'v') toggleSetting('camInset', 's-cam');
 }
 
 window.addEventListener('keydown', (e) => {
@@ -420,6 +438,7 @@ async function startCamera(deviceId?: string, remember = false): Promise<boolean
     cameraMsg.textContent = '';
     cameraProblem = null;
     diag({ k: 'camera', label: track.label, settings: track.getSettings() });
+    sendCamera();
     resetTracking();
     syncCameraSelect();
     if (remember && track.getSettings().deviceId) save('camera', { id: track.getSettings().deviceId });
@@ -479,12 +498,29 @@ navigator.mediaDevices?.addEventListener?.('devicechange', async () => {
 
 let lastTs = 0;
 let lastFrameAt = 0;
-let fpsFrames = 0, fpsSince = performance.now(), detectMs = 0;
+let fpsFrames = 0, fpsSince = performance.now(), detectMs = 0, fpsNow = 0;
 let lastPen = { x: 0.5, y: 0.5 };
 let handGone = true; // whether the wall has been told the hand is gone
 
 function sendPen(x: number, y: number, down: boolean, visible: boolean) {
   channel.send({ type: 'pen', x, y, down, visible, t: performance.now() });
+}
+
+/** Everything the wall's heads-up display shows about tracking, once per camera frame. */
+function sendTrack(all: TrackedHand[], writer: TrackedHand | null, down: boolean, start = 0, wipe = 0) {
+  const r3 = (v: number) => Math.round(v * 1000) / 1000;
+  const palm = writer && !calibration.active ? cameraToWall({ x: writer.img[9].x, y: writer.img[9].y }, H, settings.mirror) : null;
+  channel.send({
+    type: 'track',
+    hands: all.map((h) => ({ lm: h.img.flatMap((p) => [r3(p.x), r3(p.y)]), score: r3(h.score), writer: h === writer, down: h === writer && down })),
+    aspect: video.videoWidth / video.videoHeight || 16 / 9,
+    palm,
+    armed: session.armed,
+    start,
+    wipe,
+    fps: fpsNow,
+    ms: detectMs,
+  });
 }
 
 function resetTracking() {
@@ -507,7 +543,7 @@ function processFrame() {
 
   const now = performance.now();
   const all: TrackedHand[] = res.landmarks
-    .map((img, i) => ({ img, world: res.worldLandmarks[i], label: res.handedness[i]?.[0]?.categoryName ?? '' }))
+    .map((img, i) => ({ img, world: res.worldLandmarks[i], label: res.handedness[i]?.[0]?.categoryName ?? '', score: res.handedness[i]?.[0]?.score ?? 0 }))
     .filter((h) => h.world);
   // a hand cut off by the frame edge gives garbage readings: treat it as no hand
   const hands = all.filter((h) => handInFrame(h.img));
@@ -555,6 +591,7 @@ function processFrame() {
       sendPen(lastPen.x, lastPen.y, !grabbing && out.penDown && !!w, !grabbing && out.visible && !!w);
     }
     drawOverlay(img, down, other?.img ?? null);
+    sendTrack(all, writer, down, startProgress, wipeProgress);
     updateReadout(true, down, settings.penGesture === 'point' ? PointDetector.score(world) : 1 - ratio / 1.2, startProgress, wipeProgress);
   } else {
     if (!calibration.active) onSessionEvent(session.update({ present: false, palm: false, open: false, pinch: false, wristX: 0 }, now).event);
@@ -564,6 +601,7 @@ function processFrame() {
     diag({ k: img ? 'edge' : 'none', raw: img ? pt(penTip(img)) : null });
     if (now - lastHandAt > (penIsDown() ? HAND_LOST_WRITING_MS : HAND_LOST_MS)) handLost(now);
     drawOverlay(null, false);
+    sendTrack(all, null, false);
     updateReadout(false, false, 0, 0, 0);
   }
 }
@@ -705,7 +743,7 @@ probe.height = 18;
 const pctx = probe.getContext('2d', { willReadFrequently: true })!;
 setInterval(() => {
   const now = performance.now();
-  const fps = (fpsFrames * 1000) / (now - fpsSince);
+  const fps = (fpsNow = (fpsFrames * 1000) / (now - fpsSince));
   fpsFrames = 0;
   fpsSince = now;
   setText($('fps'), tracker && video.readyState >= 2 ? `${fps.toFixed(0)} frames a second, ${detectMs.toFixed(0)} ms to track` : '');

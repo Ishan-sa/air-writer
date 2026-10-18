@@ -21,6 +21,10 @@ export interface Settings {
   sfx: number;
   /** What puts the pen down: pointing the index finger, or pinching. */
   penGesture: 'point' | 'pinch';
+  /** Draw the heads-up display on the wall: frame, readouts, reticle, grid. */
+  hud: boolean;
+  /** Show the live camera with hand tracking in a corner of the wall. */
+  camInset: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,7 +36,32 @@ export const DEFAULT_SETTINGS: Settings = {
   swipeWipe: true,
   sfx: 0.7,
   penGesture: 'point',
+  hud: true,
+  camInset: true,
 };
+
+/** One tracked hand as the wall's camera window draws it. */
+export interface TrackHand {
+  /** 21 landmarks in camera image space (0..1), flattened as x0, y0, x1, y1, … */
+  lm: number[];
+  score: number;
+  writer: boolean;
+  down: boolean;
+}
+
+/** What the tracker sees each frame, for the wall's heads-up display. */
+export interface TrackInfo {
+  hands: TrackHand[];
+  /** Camera frame width / height. */
+  aspect: number;
+  /** The writing hand's palm, mapped onto the wall (null when out of view or unmappable). */
+  palm: WallPoint | null;
+  armed: boolean;
+  start: number; // 0..1 while the start palm is held
+  wipe: number; // 0..1 while the wipe palm is held
+  fps: number;
+  ms: number; // time to track one frame
+}
 
 /** Messages between the control window (tracking) and the wall window (rendering). */
 export type Msg =
@@ -44,4 +73,6 @@ export type Msg =
   | { type: 'calib'; step: number | null; corners: WallPoint[] }
   | { type: 'settings'; settings: Settings }
   | { type: 'hello' }
-  | { type: 'key'; key: string };
+  | { type: 'key'; key: string }
+  | ({ type: 'track' } & TrackInfo)
+  | { type: 'camera'; deviceId: string | null; label: string };
