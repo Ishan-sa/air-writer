@@ -172,14 +172,23 @@ describe('pointing (index out, other fingers curled)', () => {
     }
   });
 
-  it('opening the hand or curling the index finger lifts the pen, after two frames', () => {
-    for (const lift of [hand({ open: true }), hand({})]) {
-      const d = new PointDetector();
-      d.update(hand({ point: true }));
-      d.update(hand({ point: true }));
-      expect(d.update(lift)).toBe(true);
-      expect(d.update(lift)).toBe(false);
-    }
+  it('opening the hand lifts the pen, after two frames', () => {
+    const d = new PointDetector();
+    d.update(hand({ point: true }));
+    d.update(hand({ point: true }));
+    expect(d.update(hand({ open: true }))).toBe(true);
+    expect(d.update(hand({ open: true }))).toBe(false);
+  });
+
+  it('stays down at the bottom of letters, where the index reads as curled (recorded 0.72-0.95, others ~0.65)', () => {
+    // the finger tilts toward the camera at the bottom of a letter and the 3D
+    // reading makes a straight index look curled; the other fingers stay curled
+    const d = new PointDetector();
+    d.update(hand({ point: true }));
+    d.update(hand({ point: true }));
+    const bottom = hand({}); // index reach ~0.83 with every other finger curled
+    expect(fingerReach(bottom).index).toBeLessThan(0.95);
+    expect(Array.from({ length: 12 }, () => d.update(bottom)).every(Boolean)).toBe(true);
   });
 
   it('stays down when the index reading wobbles to ~1.05-1.1 but the other fingers stay curled (recorded)', () => {

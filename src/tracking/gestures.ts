@@ -129,9 +129,10 @@ export function indexTip(img: Lm[]) {
  *     everyday lift between letters: distinct, quick, and it doesn't move the
  *     index fingertip, so no tails. (Recorded: middle reads 0.64-0.83 while
  *     pointing, ~1.3 when raised.)
- *   - the index clearly curling (< 0.95). (While still pointing it wobbles
- *     down to ~1.05-1.1, so the margin matters.)
  *   - the hand opening (ring or pinky > 1.15)
+ * A curling index finger is deliberately NOT a lift: at the bottom of letters
+ * the finger tilts toward the camera and a straight index reads as curled
+ * (recorded 0.72-0.95), which broke every word at its lowest points.
  * Pointing is much easier to detect than a pinch, and the fingertip is a
  * precise pen point.
  */
@@ -161,7 +162,7 @@ export class PointDetector {
     const r = fingerReach(world);
     const others = Math.max(r.middle, r.ring, r.pinky);
     const pointing = r.index > 1.25 && others < 1.0;
-    const released = r.index < 0.95 || r.middle > 1.1 || Math.max(r.ring, r.pinky) > 1.15;
+    const released = r.middle > 1.1 || Math.max(r.ring, r.pinky) > 1.15;
     const wants = this.down ? !released : pointing;
     if (wants === this.down) {
       this.pending = 0;
