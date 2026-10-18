@@ -102,6 +102,69 @@ export class PinchDetector {
 }
 
 /**
+ * How far each finger reaches out: fingertip-to-wrist over middle-joint-to-wrist.
+ * A straight finger reads ~1.3+, a curled one under ~1.0. Measured in 3D, so
+ * it holds up when the hand tilts.
+ */
+export function fingerReach(world: Lm[]) {
+  const wrist = world[WRIST];
+  const [index, middle, ring, pinky] = FINGERS.map((f) => dist(wrist, world[f.tip]) / Math.max(dist(wrist, world[f.pip]), 1e-6));
+  return { index, middle, ring, pinky };
+}
+
+/** The pen tip when drawing by pointing: the index fingertip, in camera image coords. */
+export function indexTip(img: Lm[]) {
+  return { x: img[INDEX_TIP].x, y: img[INDEX_TIP].y };
+}
+
+/**
+ * Pen up/down by pointing: index finger out, the other three curled. Like the
+ * pinch, it's hard to start and hard to stop:
+ * - down needs a clear point (index reach > 1.25, others < 1.0) for 2 frames
+ * - up needs the index clearly curling (< 1.1) or the hand opening (another
+ *   finger > 1.15), for 3 frames
+ * Pointing is much easier to detect than a pinch, and the fingertip is a
+ * precise pen point.
+ */
+export class PointDetector {
+  down = false;
+  private pending = 0;
+
+  constructor(
+    public confirmFrames = 2,
+    public releaseFrames = 3,
+  ) {}
+
+  reset() {
+    this.down = false;
+    this.pending = 0;
+  }
+
+  /** 0..1 for a gauge: how clearly the hand is pointing right now. */
+  static score(world: Lm[]) {
+    const r = fingerReach(world);
+    const others = Math.max(r.middle, r.ring, r.pinky);
+    const clamp = (v: number) => Math.min(Math.max(v, 0), 1);
+    return clamp((r.index - 1.0) / 0.3) * clamp((1.2 - others) / 0.25);
+  }
+
+  update(world: Lm[]): boolean {
+    const r = fingerReach(world);
+    const others = Math.max(r.middle, r.ring, r.pinky);
+    const pointing = r.index > 1.25 && others < 1.0;
+    const released = r.index < 1.1 || others > 1.15;
+    const wants = this.down ? !released : pointing;
+    if (wants === this.down) {
+      this.pending = 0;
+    } else if (++this.pending >= (this.down ? this.releaseFrames : this.confirmFrames)) {
+      this.down = wants;
+      this.pending = 0;
+    }
+    return this.down;
+  }
+}
+
+/**
  * Strict open-palm check: all four fingers straight, thumb out, fingers spread.
  * Deliberately hard to trigger so a hand relaxing mid-word never wipes the wall.
  */

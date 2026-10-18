@@ -2,7 +2,7 @@ import { openChannel } from '../shared/channel';
 import { load, loadRaw, save } from '../shared/storage';
 import { DEFAULT_SETTINGS, type Msg, type Settings } from '../shared/types';
 import { Calibration } from '../tracking/calibration';
-import { flatPinchGap, handInFrame, isHandOpen, isOpenPalm, penPoint, PinchDetector, pinchRatio } from '../tracking/gestures';
+import { flatPinchGap, fingerReach, handInFrame, indexTip, isHandOpen, isOpenPalm, penPoint, PinchDetector, pinchRatio, PointDetector, type Lm } from '../tracking/gestures';
 import { WriteSession } from '../tracking/session';
 import type { Homography } from '../tracking/homography';
 import { CALIB_CORNERS, cameraToWall } from '../tracking/mapping';
@@ -21,9 +21,15 @@ const cameraMsg = $('camera-msg');
 // v2: pinch thresholds were retuned after the first live test, so older saved values are dropped
 let settings: Settings = load('settings-v2', DEFAULT_SETTINGS);
 // v2: calibrations made with the old perspective fit are discarded (they could flip ink)
-let H: Homography | null = loadRaw<Homography>('homography-v2');
+// each pen gesture keeps its own calibration: the pen sits on a different spot of the hand
+const calibKey = () => (settings.penGesture === 'point' ? 'homography-v2-point' : 'homography-v2');
+let H: Homography | null = loadRaw<Homography>(calibKey());
 
 const pinch = new PinchDetector();
+const pointer = new PointDetector();
+const penIsDown = () => (settings.penGesture === 'point' ? pointer.down : pinch.down);
+/** Where the pen sits on the hand for the current gesture. */
+const penTip = (img: Lm[]) => (settings.penGesture === 'point' ? indexTip(img) : penPoint(img));
 const filter = new PointFilter();
 const session = new WriteSession();
 const calibration = new Calibration();
@@ -82,15 +88,15 @@ function renderStatus() {
     [word, detail, level] = ['No camera', cameraProblem, 'problem'];
   } else if (calibration.active) {
     word = CORNER_NAMES[calibration.step!];
-    detail = `Move your hand to the ${word.toLowerCase()} corner of the area you’ll write in, then pinch and hold for half a second. Corner ${calibration.step! + 1} of 4. Q or Esc cancels.`;
+    detail = `Move your hand to the ${word.toLowerCase()} corner of the area you’ll write in, then ${settings.penGesture === 'point' ? 'point' : 'pinch'} and hold for half a second. Corner ${calibration.step! + 1} of 4. Q or Esc cancels.`;
     level = 'guide';
   } else if (session.armed && live.hand && live.wipe > 0.05) {
     [word, detail, level] = ['Wiping', 'Keep your palm up to clear the wall.', 'guide'];
   } else if (session.armed && live.hand && live.down) {
-    [word, detail, level] = ['Writing', 'Open your fingers to lift the pen.', 'live'];
+    [word, detail, level] = ['Writing', settings.penGesture === 'point' ? 'Curl your finger or open your hand to lift the pen.' : 'Open your fingers to lift the pen.', 'live'];
   } else if (session.armed) {
     const wipe = settings.swipeWipe ? ' Hold up an open palm, or swipe, to wipe.' : ' Hold up an open palm to wipe.';
-    [word, detail, level] = ['Ready', `Pinch to write.${wipe} Lower your hand to stop. ${setupSentence()}`, 'ready'];
+    [word, detail, level] = ['Ready', `${settings.penGesture === 'point' ? 'Point your index finger' : 'Pinch'} to write.${wipe} Lower your hand to stop. ${setupSentence()}`, 'ready'];
   } else if (live.hand && live.start > 0.05) {
     [word, detail, level] = ['Starting', 'Keep your palm open…', 'guide'];
   } else if (live.hand) {
@@ -195,7 +201,7 @@ function onCalibEvent(ev: ReturnType<Calibration['update']>) {
   if (ev.kind !== 'captured') session.requireRelease();
   if (ev.kind === 'done') {
     H = ev.H;
-    save('homography-v2', H);
+    save(calibKey(), H);
     filter.reset();
     renderCalibStatus();
   } else if (ev.kind === 'failed') {
@@ -209,7 +215,7 @@ function onCalibEvent(ev: ReturnType<Calibration['update']>) {
 $('calibrate').addEventListener('click', startCalibration);
 $('reset-calib').addEventListener('click', () => {
   H = null;
-  save('homography-v2', null);
+  save(calibKey(), null);
   renderCalibStatus();
 });
 $('clear').addEventListener('click', () => channel.send({ type: 'clear' }));
@@ -279,6 +285,30 @@ document.querySelectorAll<HTMLButtonElement>('[data-theme-choice]').forEach((b) 
 );
 applyTheme(theme);
 
+// ---------------------------------------------------------------- pen gesture
+
+function setPenGesture(next: 'point' | 'pinch') {
+  settings = { ...settings, penGesture: next };
+  applySettings();
+  H = loadRaw<Homography>(calibKey());
+  resetTracking();
+  session.requireRelease();
+  renderPenChoice();
+  renderCalibStatus();
+}
+function renderPenChoice() {
+  document.querySelectorAll<HTMLButtonElement>('[data-pen-choice]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.penChoice === settings.penGesture));
+  });
+  // the pinch sensitivity slider only matters when drawing by pinch
+  const pinchRow = $('s-pinch').parentElement!;
+  pinchRow.style.display = settings.penGesture === 'pinch' ? '' : 'none';
+}
+document.querySelectorAll<HTMLButtonElement>('[data-pen-choice]').forEach((b) =>
+  b.addEventListener('click', () => setPenGesture(b.dataset.penChoice as 'point' | 'pinch')),
+);
+renderPenChoice();
+
 // ---------------------------------------------------------------- keys
 
 function handleKey(k: string) {
@@ -289,6 +319,7 @@ function handleKey(k: string) {
   else if (k === 'z') channel.send({ type: 'undo' });
   else if (k === 'w') openWall();
   else if (k === 't') applyTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
+  else if (k === 'p') setPenGesture(settings.penGesture === 'point' ? 'pinch' : 'point');
 }
 
 window.addEventListener('keydown', (e) => {
@@ -430,6 +461,7 @@ function sendPen(x: number, y: number, down: boolean, visible: boolean) {
 
 function resetTracking() {
   pinch.reset();
+  pointer.reset();
   filter.reset();
 }
 
@@ -458,13 +490,15 @@ function processFrame() {
     const ratio = pinchRatio(world);
     const aspect = video.videoHeight / video.videoWidth || 0.5625;
     const flatGap = flatPinchGap(img, aspect);
-    const down = pinch.update(ratio, flatGap);
-    const raw = penPoint(img);
+    const pinchDown = pinch.update(ratio, flatGap);
+    const pointDown = pointer.update(world);
+    const down = settings.penGesture === 'point' ? pointDown : pinchDown;
+    const raw = penTip(img);
 
     const handPx = Math.hypot(img[0].x - img[9].x, (img[0].y - img[9].y) * (video.videoHeight / video.videoWidth || 0.5625));
     handSize = handSize ? handSize * 0.97 + handPx * 0.03 : handPx;
     const w0 = calibration.active ? null : cameraToWall(raw, H, settings.mirror);
-    diag({ k: 'f', lm: img.map((p) => [Math.round(p.x * 1000), Math.round(p.y * 1000)]), ratio: r4(ratio), gap: r4(flatGap), down, raw: pt(raw), wall: pt(w0), hand: r4(handPx), score: r4(res.handedness[0]?.[0]?.score ?? 0), cal: calibration.step, armed: session.armed });
+    diag({ k: 'f', lm: img.map((p) => [Math.round(p.x * 1000), Math.round(p.y * 1000)]), ratio: r4(ratio), gap: r4(flatGap), reach: Object.values(fingerReach(world)).map(r4), pen: settings.penGesture, down, raw: pt(raw), wall: pt(w0), hand: r4(handPx), score: r4(res.handedness[0]?.[0]?.score ?? 0), cal: calibration.step, armed: session.armed });
 
     let startProgress = 0, wipeProgress = 0;
     if (calibration.active) {
@@ -484,15 +518,15 @@ function processFrame() {
       sendPen(lastPen.x, lastPen.y, out.penDown && !!w, out.visible && !!w);
     }
     drawOverlay(img, down);
-    updateReadout(true, down, ratio, startProgress, wipeProgress);
+    updateReadout(true, down, settings.penGesture === 'point' ? PointDetector.score(world) : 1 - ratio / 1.2, startProgress, wipeProgress);
   } else {
     if (!calibration.active) onSessionEvent(session.update({ present: false, palm: false, open: false, pinch: false, wristX: 0 }, now).event);
     // a one-frame dropout shouldn't break the stroke: say nothing during the grace period
     // (the wall holds the last state), then tell the wall the hand is gone
-    diag({ k: img ? 'edge' : 'none', raw: img ? pt(penPoint(img)) : null });
-    if (now - lastHandAt > (pinch.down ? HAND_LOST_WRITING_MS : HAND_LOST_MS)) handLost(now);
+    diag({ k: img ? 'edge' : 'none', raw: img ? pt(penTip(img)) : null });
+    if (now - lastHandAt > (penIsDown() ? HAND_LOST_WRITING_MS : HAND_LOST_MS)) handLost(now);
     drawOverlay(null, false);
-    updateReadout(false, false, 1, 0, 0);
+    updateReadout(false, false, 0, 0, 0);
   }
 }
 
@@ -552,7 +586,7 @@ function drawOverlay(img: { x: number; y: number }[] | null, down: boolean) {
     octx.arc(p.x * vw, p.y * vh, 4, 0, Math.PI * 2);
     octx.fill();
   }
-  const pen = penPoint(img as any);
+  const pen = penTip(img as Lm[]);
   octx.beginPath();
   octx.arc(pen.x * vw, pen.y * vh, down ? 14 : 9, 0, Math.PI * 2);
   octx.fillStyle = ink.pen;
@@ -571,11 +605,14 @@ function onSessionEvent(event: 'start' | 'stop' | 'wipe' | undefined) {
   renderStatus();
 }
 
-function updateReadout(hand: boolean, down: boolean, ratio: number, startProgress: number, wipeProgress = 0) {
+/** `penLevel` is 0..1: how clearly the pen gesture is being made (shown on the Pen gesture gauge). */
+function updateReadout(hand: boolean, down: boolean, penLevel: number, startProgress: number, wipeProgress = 0) {
   live = { hand, down, start: startProgress, wipe: wipeProgress };
   renderStatus();
-  $('m-pinch').style.width = `${Math.max(0, Math.min(1, 1 - ratio / 1.2)) * 100}%`;
-  $('m-pinch-mark').style.left = `${(1 - settings.pinchDown / 1.2) * 100}%`;
+  $('m-pinch').style.width = `${Math.max(0, Math.min(1, penLevel)) * 100}%`;
+  const mark = $('m-pinch-mark');
+  mark.style.display = settings.penGesture === 'pinch' ? '' : 'none';
+  mark.style.left = `${(1 - settings.pinchDown / 1.2) * 100}%`;
   $('m-start').style.width = `${Math.max(startProgress, wipeProgress) * 100}%`;
 }
 
@@ -653,7 +690,7 @@ Object.assign(window, {
       trackerState = 'ready';
       wallSeenAt = performance.now() + 1e9;
       drawOverlay(hand.landmarks, down);
-      updateReadout(true, down, down ? 0.12 : 0.7, 0, 0);
+      updateReadout(true, down, down ? 0.9 : 0.4, 0, 0);
     },
     get settings() { return settings; },
     get homography() { return H; },

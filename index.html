@@ -57,7 +57,7 @@
 
         <div class="group gauges">
           <div class="gauge">
-            <span class="gauge-name">Finger gap</span>
+            <span class="gauge-name">Pen gesture</span>
             <div class="track"><div id="m-pinch" class="fill"></div><i id="m-pinch-mark" class="mark" title="Writing starts here"></i></div>
           </div>
           <div class="gauge">
@@ -69,6 +69,14 @@
 
         <details class="group tuning">
           <summary>Tuning</summary>
+          <div class="theme">
+            <span id="pen-label">Draw with</span>
+            <div class="theme-options" role="group" aria-labelledby="pen-label">
+              <button data-pen-choice="point">Point</button>
+              <button data-pen-choice="pinch">Pinch</button>
+            </div>
+            <kbd>P</kbd>
+          </div>
           <label class="slider"><span>Smoothing</span><input id="s-smoothing" type="range" min="0" max="1" step="0.05" /><output></output></label>
           <label class="slider"><span>Ink thickness</span><input id="s-thickness" type="range" min="0.4" max="2.5" step="0.05" /><output></output></label>
           <label class="slider"><span>Sparks</span><input id="s-sparks" type="range" min="0" max="2.5" step="0.05" /><output></output></label>
@@ -90,7 +98,7 @@
 
         <p class="keys">
           On the wall window: <kbd>F</kbd> full screen, <kbd>M</kbd> draw with the mouse, <kbd>Q</kbd> cancel calibrating.
-          <kbd>Space</kbd> captures a corner without pinching.
+          <kbd>Space</kbd> captures a corner without the pen gesture.
         </p>
       </div>
     </main>

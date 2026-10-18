@@ -19,6 +19,8 @@ export interface Settings {
   swipeWipe: boolean;
   /** Sound effects volume, 0 (off) to 1. */
   sfx: number;
+  /** What puts the pen down: pointing the index finger, or pinching. */
+  penGesture: 'point' | 'pinch';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -29,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mirror: true,
   swipeWipe: true,
   sfx: 0.7,
+  penGesture: 'point',
 };
 
 /** Messages between the control window (tracking) and the wall window (rendering). */

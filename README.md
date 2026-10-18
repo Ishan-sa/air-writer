@@ -53,11 +53,11 @@ Turn the room lights down so only the ink shows on the wall. **But the tracking 
 
 Stand where you'll stand for the shot. Press **C**. The wall shows four targets one at a time:
 
-> move your hand to that corner of the area you'll write in → **pinch and hold for about half a second** → release → next corner
+> move your hand to that corner of the area you'll write in → **point (or pinch, in pinch mode) and hold for about half a second** → release → next corner
 
 Move your whole hand, don't just point from where you stand: the app maps how far your hand travels in front of the camera onto the wall. Make the area about as big as you'll write, and keep your hand inside the tracking camera's view the whole time.
 
-Order: top-left, top-right, bottom-right, bottom-left. After the fourth, the control view says **Calibrated**. The calibration is saved, so you only redo it if you, the camera or the projector moves.
+Order: top-left, top-right, bottom-right, bottom-left. After the fourth, the control view says **Calibrated**. The calibration is saved (separately for pointing and pinching, since the pen sits on a different spot of your hand), so you only redo it if you, the camera or the projector moves.
 
 - **Space** captures the current corner without pinching (if a pinch isn't registering).
 - **Q** (or Esc on the laptop) cancels. On the full-screen wall use Q, because Esc there exits full screen. **Forget calibration** goes back to the default "draw big in front of you" mode.
@@ -67,7 +67,7 @@ Order: top-left, top-right, bottom-right, bottom-left. After the fourth, the con
 ### 6. Do a test word, then shoot
 
 1. **Start: hold an open palm toward the camera for about half a second.** Until then, a hand in view does nothing. When it goes live, the pen dot ignites on the wall with a burst of sparks. The *Start hold* bar fills up as you hold.
-2. **Write: pinch** (thumb and index touching) to draw, **open your fingers** to lift the pen between letters.
+2. **Write: point your index finger** (other fingers curled) to draw. The pen is your fingertip. **Curl the finger or open your hand** to lift the pen between letters. Prefer pinching? Switch *Draw with* to **Pinch** under Tuning, or press **P**.
 3. **Wipe: swipe an open hand sideways**, like wiping a board.
 4. **Stop: lower your hand out of the camera's view for about a second.** Show your palm again to start the next take.
 - Keyboard backups (on either window): **X** clear, **Z** undo last stroke.
@@ -102,7 +102,7 @@ The control view starts in **Dark**: dim darkroom reds that won't light up your 
 | **Smoothing** | lines look shaky or jagged | the ink trails behind your hand |
 | **Ink thickness** | words are hard to read on the Reel | letters blob together |
 | **Sparks** | you want more sparkle | sparks distract from the words |
-| **Pinch sensitivity** | strokes break while you're pinching | ink appears between letters when you didn't pinch |
+| **Pinch sensitivity** (pinch mode) | strokes break while you're pinching | ink appears between letters when you didn't pinch |
 
 The **Pinch** bar shows how closed your fingers are, and the white mark is where writing starts. Settings are remembered.
 
@@ -121,6 +121,7 @@ The **Pinch** bar shows how closed your fingers are, and the white mark is where
 |---|---|---|
 | W | control | open the wall window |
 | T | control | switch between dark, light and auto |
+| P | control | draw by pointing or by pinching |
 | C | either | calibrate |
 | Space | control | capture current corner (during calibration) |
 | Q / Esc | either | cancel calibration (use Q on the full-screen wall) |

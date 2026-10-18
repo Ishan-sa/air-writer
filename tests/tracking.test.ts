@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyHomography, computeHomography, isUsableQuad } from '../src/tracking/homography';
 import { OneEuroFilter, PointFilter } from '../src/tracking/oneEuro';
-import { handInFrame, isOpenPalm, PalmHold, PinchDetector, pinchRatio, type Lm } from '../src/tracking/gestures';
+import { fingerReach, handInFrame, isOpenPalm, PalmHold, PinchDetector, pinchRatio, PointDetector, type Lm } from '../src/tracking/gestures';
 import { CALIB_CORNERS, cameraToWall, defaultMap } from '../src/tracking/mapping';
 import { addPoint, smoothStroke, trimTail, type Stroke } from '../src/wall/strokes';
 
@@ -125,7 +125,7 @@ describe('one euro filter', () => {
 });
 
 /** Builds world landmarks for a hand: 21 points, metres-ish scale. */
-function hand(opts: { pinch?: boolean; open?: boolean }): Lm[] {
+function hand(opts: { pinch?: boolean; open?: boolean; point?: boolean }): Lm[] {
   const lm: Lm[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
   const set = (i: number, x: number, y: number) => (lm[i] = { x, y, z: 0 });
   set(0, 0, 0); // wrist
@@ -141,14 +141,56 @@ function hand(opts: { pinch?: boolean; open?: boolean }): Lm[] {
     [14, 16],
     [18, 20],
   ].forEach(([pip, tip], k) => {
+    const straight = !curled || (opts.point && k === 0);
     set(pip, fingerX[k], -0.12);
-    set(tip, fingerX[k] * (opts.open ? 1.3 : 1), curled ? -0.1 : -0.17);
+    set(tip, fingerX[k] * (opts.open ? 1.3 : 1), straight ? -0.17 : -0.1);
   });
   set(3, -0.05, -0.04);
   set(4, opts.open ? -0.085 : -0.04, opts.open ? -0.06 : -0.09); // thumb tip
   if (opts.pinch) set(4, lm[8].x + 0.005, lm[8].y + 0.005);
   return lm;
 }
+
+describe('pointing (index out, other fingers curled)', () => {
+  it('measures how far each finger reaches out', () => {
+    const r = fingerReach(hand({ point: true }));
+    expect(r.index).toBeGreaterThan(1.25);
+    expect(Math.max(r.middle, r.ring, r.pinky)).toBeLessThan(1.0);
+  });
+
+  it('a pointing hand starts writing after two frames', () => {
+    const d = new PointDetector();
+    expect(d.update(hand({ point: true }))).toBe(false);
+    expect(d.update(hand({ point: true }))).toBe(true);
+  });
+
+  it('an open hand, a fist or a pinch does not write', () => {
+    for (const h of [hand({ open: true }), hand({}), hand({ pinch: true })]) {
+      const d = new PointDetector();
+      [1, 2, 3, 4].forEach(() => d.update(h));
+      expect(d.down).toBe(false);
+    }
+  });
+
+  it('opening the hand or curling the index finger lifts the pen, after three frames', () => {
+    for (const lift of [hand({ open: true }), hand({})]) {
+      const d = new PointDetector();
+      d.update(hand({ point: true }));
+      d.update(hand({ point: true }));
+      expect(d.update(lift)).toBe(true);
+      expect(d.update(lift)).toBe(true);
+      expect(d.update(lift)).toBe(false);
+    }
+  });
+
+  it('a one-frame wobble mid-stroke does not lift the pen', () => {
+    const d = new PointDetector();
+    d.update(hand({ point: true }));
+    d.update(hand({ point: true }));
+    d.update(hand({}));
+    expect(d.update(hand({ point: true }))).toBe(true);
+  });
+});
 
 describe('pinch detection', () => {
   it('measures a pinch as a small ratio', () => {
