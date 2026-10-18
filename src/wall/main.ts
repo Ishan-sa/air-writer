@@ -1,6 +1,7 @@
 import { openChannel } from '../shared/channel';
 import { DEFAULT_SETTINGS, type Msg, type Settings, type WallPoint } from '../shared/types';
 import { drawHotTail, drawStroke } from './ink';
+import { applyGrab, canvasMatrix, grabTransform } from './transform';
 import { Sparks } from './sparks';
 import { Sfx } from './sfx';
 import { addPoint, smoothStroke, trimTail, type Stroke } from './strokes';
@@ -19,6 +20,10 @@ const lctx = liveLayer.getContext('2d')!;
 let W = 0, H = 0, u = 1;
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let strokes: Stroke[] = [];
+/** Line-width multiplier per finished stroke (grows and shrinks with two-hand resizes). */
+let widths: number[] = [];
+/** While both hands hold the writing: where they started and where they are now. */
+let held: { a0: WallPoint; b0: WallPoint; a: WallPoint; b: WallPoint } | null = null;
 let live: Stroke | null = null;
 let wipeStart: number | null = null; // fade-out in progress
 const WIPE_MS = 500;
@@ -89,13 +94,13 @@ watchPixelRatio();
 
 function rebake() {
   bctx.clearRect(0, 0, W, H);
-  for (const s of strokes) bake(s);
+  strokes.forEach((s, i) => bake(s, widths[i] ?? 1));
 }
 
 /** Renders a finished stroke via the scratch layer and adds it to the baked ink. */
-function bake(s: Stroke) {
+function bake(s: Stroke, width = 1) {
   lctx.clearRect(0, 0, W, H);
-  drawStroke(lctx, smoothStroke(s), W, H, settings.thickness);
+  drawStroke(lctx, smoothStroke(s), W, H, settings.thickness * width);
   bctx.save();
   bctx.globalCompositeOperation = 'lighter';
   bctx.drawImage(liveLayer, 0, 0);
@@ -161,7 +166,19 @@ function endStroke(upAt?: number, trimMs = RELEASE_TRIM_MS) {
   live = null;
   if (isAccidental(done)) return;
   strokes.push(done);
+  widths.push(1);
   bake(done);
+}
+
+/** Letting go: move the strokes themselves to where the hands left them, and re-draw crisp. */
+function releaseGrab() {
+  if (!held) return;
+  const aspect = W / H;
+  const T = grabTransform(held.a0, held.b0, held.a, held.b, aspect);
+  strokes = strokes.map((s) => s.map((p) => ({ ...applyGrab(T, p, aspect), t: p.t })));
+  widths = widths.map((w) => w * T.scale);
+  held = null;
+  rebake();
 }
 
 function clearWall() {
@@ -174,6 +191,7 @@ function clearWall() {
 function finishWipe() {
   wipeStart = null;
   strokes = [];
+  widths = [];
   rebake();
 }
 
@@ -184,6 +202,7 @@ function undo() {
     return;
   }
   strokes.pop();
+  widths.pop();
   rebake();
 }
 
@@ -193,6 +212,18 @@ const channel = openChannel((msg: Msg) => {
   switch (msg.type) {
     case 'pen':
       if (!mouseMode) penInput(msg.x, msg.y, msg.down, msg.visible, performance.now());
+      break;
+    case 'grab':
+      if (msg.phase === 'start' && msg.a && msg.b) {
+        endStroke();
+        held = { a0: msg.a, b0: msg.b, a: msg.a, b: msg.b };
+        sfx?.blip();
+      } else if (msg.phase === 'move' && held && msg.a && msg.b) {
+        held.a = msg.a;
+        held.b = msg.b;
+      } else if (msg.phase === 'end') {
+        releaseGrab();
+      }
       break;
     case 'session':
       if (msg.live) {
@@ -252,7 +283,15 @@ function frame(now: number) {
   }
   if (wipeStart !== null || strokes.length) {
     ctx.globalAlpha = inkAlpha;
-    ctx.drawImage(baked, 0, 0);
+    if (held) {
+      // while held, move the already-drawn ink as one picture (fast); it's
+      // re-drawn crisp from the moved strokes when the hands let go
+      ctx.setTransform(...canvasMatrix(grabTransform(held.a0, held.b0, held.a, held.b, W / H), H));
+      ctx.drawImage(baked, 0, 0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    } else {
+      ctx.drawImage(baked, 0, 0);
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -279,6 +318,7 @@ function frame(now: number) {
   dotAlpha += ((showDot ? 1 : 0) - dotAlpha) * Math.min(dt * 12, 1);
   if (dotAlpha > 0.01) drawDot(tip.x, tip.y, pen.down, dotAlpha, now);
 
+  if (held) drawHands(now);
   if (calib.step !== null) drawCalibration(now);
 
   requestAnimationFrame(frame);
@@ -305,6 +345,31 @@ function drawDot(x: number, y: number, down: boolean, alpha: number, now: number
   ctx.beginPath();
   ctx.arc(x, y, coreR, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
+}
+
+/** A glowing ring at each hand while it holds the writing. */
+function drawHands(now: number) {
+  if (!held) return;
+  const pulse = 0.85 + 0.15 * Math.sin(now / 160);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const p of [held.a, held.b]) {
+    const x = p.x * W, y = p.y * H, r = 34 * u * pulse;
+    const g = ctx.createRadialGradient(x, y, r * 0.55, x, y, r * 1.6);
+    g.addColorStop(0, 'rgba(255, 179, 71, 0)');
+    g.addColorStop(0.35, 'rgba(255, 160, 50, 0.35)');
+    g.addColorStop(1, 'rgba(255, 94, 0, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 220, 160, 0.85)';
+    ctx.lineWidth = 2.5 * u;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 

@@ -7,6 +7,7 @@ export interface HandFrame {
   open: boolean; // fingers straight (looser: a moving, blurred hand still counts)
   pinch: boolean; // thumb and index together (debounced)
   wristX: number; // wrist position across the camera image, 0..1
+  twoHands?: boolean; // both hands up: that's a grab, so never wipe
 }
 
 export interface SessionOutput {
@@ -81,8 +82,9 @@ export class WriteSession {
 
     const penDown = f.pinch && !this.needsRelease;
     if (!f.palm) this.startPalmDone = true;
-    const hold = this.wipeHold.update(this.startPalmDone && f.palm && !f.pinch, now);
-    const wipe = hold.fire || (this.swipeEnabled && !penDown && this.swiped(f, now));
+    if (f.twoHands) this.trail = [];
+    const hold = this.wipeHold.update(!f.twoHands && this.startPalmDone && f.palm && !f.pinch, now);
+    const wipe = hold.fire || (!f.twoHands && this.swipeEnabled && !penDown && this.swiped(f, now));
     return { event: wipe ? 'wipe' : undefined, penDown, visible: true, startProgress: 0, wipeProgress: hold.progress };
   }
 

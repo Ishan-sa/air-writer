@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS, type Msg, type Settings } from '../shared/types';
 import { Calibration } from '../tracking/calibration';
 import { flatPinchGap, fingerReach, handInFrame, indexTip, isHandOpen, isOpenPalm, penPoint, PinchDetector, pinchRatio, PointDetector, type Lm } from '../tracking/gestures';
 import { WriteSession } from '../tracking/session';
+import { TwoHandGrab } from '../tracking/grab';
 import type { Homography } from '../tracking/homography';
 import { CALIB_CORNERS, cameraToWall } from '../tracking/mapping';
 import { PointFilter } from '../tracking/oneEuro';
@@ -32,6 +33,30 @@ const penIsDown = () => (settings.penGesture === 'point' ? pointer.down : pinch.
 const penTip = (img: Lm[]) => (settings.penGesture === 'point' ? indexTip(img) : penPoint(img));
 const filter = new PointFilter();
 const session = new WriteSession();
+const grab = new TwoHandGrab();
+const grabFilters = [new PointFilter(), new PointFilter()];
+grabFilters.forEach((f) => f.setSmoothing(0.6));
+/** Which hand writes ('Left'/'Right' as MediaPipe labels it), learned from the first stroke. */
+let writerLabel = '';
+let lastWriterRaw: { x: number; y: number } | null = null;
+
+interface TrackedHand {
+  img: Lm[];
+  world: Lm[];
+  label: string;
+}
+
+/** With two hands in view, the writing hand is the one that wrote last (by label, then by position). */
+function pickWriter(hands: TrackedHand[]): TrackedHand | null {
+  if (hands.length <= 1) return hands[0] ?? null;
+  const byLabel = hands.filter((h) => h.label === writerLabel);
+  if (writerLabel && byLabel.length === 1) return byLabel[0];
+  if (lastWriterRaw) {
+    const d = (h: TrackedHand) => Math.hypot(h.img[8].x - lastWriterRaw!.x, h.img[8].y - lastWriterRaw!.y);
+    return d(hands[0]) <= d(hands[1]) ? hands[0] : hands[1];
+  }
+  return hands[0];
+}
 const calibration = new Calibration();
 let tracker: HandLandmarker | null = null;
 let lastHandAt = 0;
@@ -90,12 +115,14 @@ function renderStatus() {
     word = CORNER_NAMES[calibration.step!];
     detail = `Move your hand to the ${word.toLowerCase()} corner of the area you’ll write in, then ${settings.penGesture === 'point' ? 'point' : 'pinch'} and hold for half a second. Corner ${calibration.step! + 1} of 4. Q or Esc cancels.`;
     level = 'guide';
+  } else if (grab.active) {
+    [word, detail, level] = ['Moving', 'Slide, twist or spread your hands to move, rotate and resize. Drop a hand to let go.', 'live'];
   } else if (session.armed && live.hand && live.wipe > 0.05) {
     [word, detail, level] = ['Wiping', 'Keep your palm up to clear the wall.', 'guide'];
   } else if (session.armed && live.hand && live.down) {
     [word, detail, level] = ['Writing', settings.penGesture === 'point' ? 'Curl your finger or open your hand to lift the pen.' : 'Open your fingers to lift the pen.', 'live'];
   } else if (session.armed) {
-    const wipe = settings.swipeWipe ? ' Hold up an open palm, or swipe, to wipe.' : ' Hold up an open palm to wipe.';
+    const wipe = (settings.swipeWipe ? ' Hold up an open palm, or swipe, to wipe.' : ' Hold up an open palm to wipe.') + ' Raise both open hands to move the writing.';
     [word, detail, level] = ['Ready', `${settings.penGesture === 'point' ? 'Point your index finger' : 'Pinch'} to write.${wipe} Lower your hand to stop. ${setupSentence()}`, 'ready'];
   } else if (live.hand && live.start > 0.05) {
     [word, detail, level] = ['Starting', 'Keep your palm open…', 'guide'];
@@ -477,12 +504,18 @@ function processFrame() {
   detectMs = detectMs * 0.9 + (performance.now() - t0) * 0.1;
   fpsFrames++;
 
-  const img = res.landmarks[0];
-  const world = res.worldLandmarks[0];
   const now = performance.now();
+  const all: TrackedHand[] = res.landmarks
+    .map((img, i) => ({ img, world: res.worldLandmarks[i], label: res.handedness[i]?.[0]?.categoryName ?? '' }))
+    .filter((h) => h.world);
   // a hand cut off by the frame edge gives garbage readings: treat it as no hand
-  const inFrame = !!img && handInFrame(img);
-  if (img && !inFrame) handAtEdgeAt = now;
+  const hands = all.filter((h) => handInFrame(h.img));
+  if (all.length > hands.length && hands.length === 0) handAtEdgeAt = now;
+  const writer = pickWriter(hands);
+  const other = hands.find((h) => h !== writer) ?? null;
+  const img = writer?.img;
+  const world = writer?.world;
+  const inFrame = !!writer;
 
   if (img && world && inFrame) {
     lastHandAt = now;
@@ -494,6 +527,8 @@ function processFrame() {
     const pointDown = pointer.update(world);
     const down = settings.penGesture === 'point' ? pointDown : pinchDown;
     const raw = penTip(img);
+    lastWriterRaw = { x: img[8].x, y: img[8].y };
+    if (down && writer!.label) writerLabel = writer!.label;
 
     const handPx = Math.hypot(img[0].x - img[9].x, (img[0].y - img[9].y) * (video.videoHeight / video.videoWidth || 0.5625));
     handSize = handSize ? handSize * 0.97 + handPx * 0.03 : handPx;
@@ -505,7 +540,7 @@ function processFrame() {
       onCalibEvent(calibration.update(raw, down, now));
       sendPen(lastPen.x, lastPen.y, false, false);
     } else {
-      const out = session.update({ present: true, palm: isOpenPalm(world), open: isHandOpen(world), pinch: down, wristX: img[0].x }, now);
+      const out = session.update({ present: true, palm: isOpenPalm(world), open: isHandOpen(world), pinch: down, wristX: img[0].x, twoHands: !!other }, now);
       onSessionEvent(out.event);
       startProgress = out.startProgress;
       wipeProgress = out.wipeProgress;
@@ -514,13 +549,15 @@ function processFrame() {
         const f = filter.filter(w.x, w.y, now / 1000);
         lastPen = f;
       }
-      // off: no dot, no ink. Outside what the calibration can map: treat as out of view.
-      sendPen(lastPen.x, lastPen.y, out.penDown && !!w, out.visible && !!w);
+      const grabbing = updateGrab(writer!, other, down, now);
+      // off or grabbing: no dot, no ink. Outside what the calibration can map: treat as out of view.
+      sendPen(lastPen.x, lastPen.y, !grabbing && out.penDown && !!w, !grabbing && out.visible && !!w);
     }
-    drawOverlay(img, down);
+    drawOverlay(img, down, other?.img ?? null);
     updateReadout(true, down, settings.penGesture === 'point' ? PointDetector.score(world) : 1 - ratio / 1.2, startProgress, wipeProgress);
   } else {
     if (!calibration.active) onSessionEvent(session.update({ present: false, palm: false, open: false, pinch: false, wristX: 0 }, now).event);
+    if (grab.active) updateGrab(null, null, false, now);
     // a one-frame dropout shouldn't break the stroke: say nothing during the grace period
     // (the wall holds the last state), then tell the wall the hand is gone
     diag({ k: img ? 'edge' : 'none', raw: img ? pt(penTip(img)) : null });
@@ -528,6 +565,37 @@ function processFrame() {
     drawOverlay(null, false);
     updateReadout(false, false, 0, 0, 0);
   }
+}
+
+/** Runs the two-hand grab; returns true while the writing is being held. */
+function updateGrab(writer: TrackedHand | null, other: TrackedHand | null, penDown: boolean, now: number): boolean {
+  let frame = { hands: 0, aOpen: false, bOpen: false, a: { x: 0, y: 0 }, b: { x: 0, y: 0 }, penDown };
+  if (session.armed && writer && other) {
+    // anchor each hand at its palm centre (middle-finger knuckle), mapped onto the wall
+    const pw = cameraToWall({ x: writer.img[9].x, y: writer.img[9].y }, H, settings.mirror);
+    const po = cameraToWall({ x: other.img[9].x, y: other.img[9].y }, H, settings.mirror);
+    if (pw && po) {
+      // keep a consistent left/right order so a grab never flips half a turn
+      const pairs = [
+        { p: pw, open: isHandOpen(writer.world) },
+        { p: po, open: isHandOpen(other.world) },
+      ].sort((u, v) => u.p.x - v.p.x);
+      frame = { hands: 2, aOpen: pairs[0].open, bOpen: pairs[1].open, a: pairs[0].p, b: pairs[1].p, penDown };
+    }
+  }
+  const out = grab.update(frame, now);
+  if (out.event === 'start') grabFilters.forEach((f) => f.reset());
+  if (out.event === 'start' || out.event === 'move') {
+    const a = grabFilters[0].filter(out.a!.x, out.a!.y, now / 1000);
+    const b = grabFilters[1].filter(out.b!.x, out.b!.y, now / 1000);
+    channel.send({ type: 'grab', phase: out.event, a, b });
+    diag({ k: 'grab', phase: out.event, a: pt(a), b: pt(b) });
+  } else if (out.event === 'end') {
+    channel.send({ type: 'grab', phase: 'end' });
+    diag({ k: 'grab', phase: 'end' });
+  }
+  if (out.event) renderStatus();
+  return grab.active;
 }
 
 function handLost(now: number) {
@@ -563,14 +631,30 @@ setInterval(() => {
 let previewSize: { w: number; h: number } | null = null;
 
 
-function drawOverlay(img: { x: number; y: number }[] | null, down: boolean) {
+function drawOverlay(img: { x: number; y: number }[] | null, down: boolean, second: { x: number; y: number }[] | null = null) {
   const vw = video.videoWidth || previewSize?.w || 1280, vh = video.videoHeight || previewSize?.h || 720;
   if (overlay.width !== vw || overlay.height !== vh) {
     overlay.width = vw;
     overlay.height = vh;
   }
   octx.clearRect(0, 0, vw, vh);
+  if (second) drawSkeleton(second, vw, vh, 0.45);
   if (!img) return;
+  drawSkeleton(img, vw, vh, 1);
+  const pen = penTip(img as Lm[]);
+  octx.beginPath();
+  octx.arc(pen.x * vw, pen.y * vh, down ? 14 : 9, 0, Math.PI * 2);
+  octx.fillStyle = ink.pen;
+  octx.shadowColor = ink.pen;
+  octx.shadowBlur = down ? 24 : 8;
+  octx.fill();
+  octx.shadowBlur = 0;
+}
+
+/** A hand's bones and joints over the camera feed; the second hand is drawn fainter. */
+function drawSkeleton(img: { x: number; y: number }[], vw: number, vh: number, alpha: number) {
+  octx.save();
+  octx.globalAlpha = alpha;
   octx.lineWidth = 3;
   octx.strokeStyle = ink.bone;
   for (const c of HandLandmarker.HAND_CONNECTIONS) {
@@ -586,18 +670,15 @@ function drawOverlay(img: { x: number; y: number }[] | null, down: boolean) {
     octx.arc(p.x * vw, p.y * vh, 4, 0, Math.PI * 2);
     octx.fill();
   }
-  const pen = penTip(img as Lm[]);
-  octx.beginPath();
-  octx.arc(pen.x * vw, pen.y * vh, down ? 14 : 9, 0, Math.PI * 2);
-  octx.fillStyle = ink.pen;
-  octx.shadowColor = ink.pen;
-  octx.shadowBlur = down ? 24 : 8;
-  octx.fill();
-  octx.shadowBlur = 0;
+  octx.restore();
 }
 
 function onSessionEvent(event: 'start' | 'stop' | 'wipe' | undefined) {
   if (!event) return;
+  if (event === 'stop' && grab.active) {
+    grab.cancel();
+    channel.send({ type: 'grab', phase: 'end' });
+  }
   diag({ k: 'session', event });
   if (event === 'start') channel.send({ type: 'session', live: true });
   else if (event === 'stop') channel.send({ type: 'session', live: false });

@@ -137,6 +137,17 @@ describe('writing session', () => {
     expect(again.out.at(-1)!.penDown).toBe(true);
   });
 
+  it('with both hands up (a grab), a held palm or a swipe never wipes', () => {
+    const s = new WriteSession();
+    let { t } = run(s, repeat(palm(), 700));
+    ({ t } = run(s, repeat(idle(), 300), t));
+    const twoPalms = repeat({ ...palm(), twoHands: true }, 2000);
+    const twoSwipe = Array.from({ length: 12 }, (_, i) => ({ ...palm(0.3 + i * 0.03), palm: false, twoHands: true }));
+    const a = run(s, twoPalms, t);
+    const b = run(s, twoSwipe, a.t);
+    expect([...a.out, ...b.out].some((o) => o.event === 'wipe')).toBe(false);
+  });
+
   it('reports how far along the start hold is', () => {
     const s = new WriteSession();
     const { out } = run(s, repeat(palm(), 300));

@@ -69,7 +69,8 @@ Order: top-left, top-right, bottom-right, bottom-left. After the fourth, the con
 1. **Start: hold an open palm toward the camera for about half a second.** Until then, a hand in view does nothing. When it goes live, the pen dot ignites on the wall with a burst of sparks. The *Start hold* bar fills up as you hold.
 2. **Write: point your index finger** (other fingers curled) to draw. The pen is your fingertip. **Curl the finger or open your hand** to lift the pen between letters. Prefer pinching? Switch *Draw with* to **Pinch** under Tuning, or press **P**.
 3. **Wipe: swipe an open hand sideways**, like wiping a board.
-4. **Stop: lower your hand out of the camera's view for about a second.** Show your palm again to start the next take.
+4. **Move it: raise both open hands.** After a moment the writing is grabbed, with a glowing ring at each hand. Slide your hands to move it, twist them to rotate it, and spread them apart or bring them together to resize it. Drop or close either hand to let go. While both hands are up, erasing is switched off.
+5. **Stop: lower your hand out of the camera's view for about a second.** Show your palm again to start the next take.
 - Keyboard backups (on either window): **X** clear, **Z** undo last stroke.
 
 The big word on the control screen tracks this: *Show your palm* → *Ready* → *Writing*.

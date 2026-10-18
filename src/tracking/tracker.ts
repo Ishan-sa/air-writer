@@ -9,7 +9,7 @@ export async function createHandTracker(runningMode: 'VIDEO' | 'IMAGE' = 'VIDEO'
   const options = {
     baseOptions: { modelAssetPath: MODEL_PATH, delegate: 'GPU' as const },
     runningMode,
-    numHands: 1,
+    numHands: 2, // one writes; both together grab and transform the writing
     minHandDetectionConfidence: 0.5,
     // lower than the defaults so a fast, blurred hand stays tracked instead of
     // dropping to a full re-detection (which struggles with a pinched hand)

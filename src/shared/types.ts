@@ -39,6 +39,7 @@ export type Msg =
   | { type: 'pen'; x: number; y: number; down: boolean; visible: boolean; t: number }
   | { type: 'clear' }
   | { type: 'session'; live: boolean }
+  | { type: 'grab'; phase: 'start' | 'move' | 'end'; a?: WallPoint; b?: WallPoint }
   | { type: 'undo' }
   | { type: 'calib'; step: number | null; corners: WallPoint[] }
   | { type: 'settings'; settings: Settings }
