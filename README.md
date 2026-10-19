@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/media/banner.svg" alt="Air Writer" width="820">
+<img src="docs/media/wordmark.svg" alt="Air Writer" width="820">
 
 <p>
   <img alt="licence MIT" src="https://img.shields.io/badge/licence-MIT-ffb452?style=for-the-badge&labelColor=1b1f27">
