@@ -1,23 +1,42 @@
 <div align="center">
 
-# Air Writer
+<img src="docs/media/banner.svg" alt="Air Writer" width="820">
 
-**Write on your wall with your finger.**
+<p>
+  <img alt="licence MIT" src="https://img.shields.io/badge/licence-MIT-ffb452?style=for-the-badge&labelColor=1b1f27">
+  <img alt="runs in Chrome" src="https://img.shields.io/badge/runs%20in-Chrome-78e4ff?style=for-the-badge&logo=googlechrome&logoColor=white&labelColor=1b1f27">
+  <img alt="TypeScript" src="https://img.shields.io/badge/built%20with-TypeScript-3178c6?style=for-the-badge&logo=typescript&logoColor=white&labelColor=1b1f27">
+  <img alt="MediaPipe hand tracking" src="https://img.shields.io/badge/hand%20tracking-MediaPipe-ff8a1e?style=for-the-badge&labelColor=1b1f27">
+  <img alt="works offline" src="https://img.shields.io/badge/works-offline-7c5cff?style=for-the-badge&labelColor=1b1f27">
+</p>
 
-A camera tracks your hand, and a projector draws glowing sparkler ink wherever you point.<br>
-It all runs in the browser, offline, with no app to install and no cloud.
+<h3>Point at your wall, write in the air, and it appears as glowing ink.</h3>
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-c6ff4f?style=flat-square)](LICENSE)
-![Runs in Chrome](https://img.shields.io/badge/runs%20in-Chrome-4de3ff?style=flat-square)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?style=flat-square&logo=typescript&logoColor=white)
-![MediaPipe](https://img.shields.io/badge/hand%20tracking-MediaPipe-ff9f43?style=flat-square)
-![Offline](https://img.shields.io/badge/works-offline-8a929e?style=flat-square)
+<p>
+A camera tracks your hand, and a projector draws sparkler ink wherever your finger points.<br>
+Lift the pen with two fingers, grab the writing with both hands, wipe it with your palm.<br>
+A sci-fi heads-up display on the wall shows the live camera and your hand's skeleton.
+</p>
+
+<p>
+  <b><a href="#-quick-start">Quick start</a></b> ·
+  <b><a href="#%EF%B8%8F-set-it-up-in-five-steps">Setup</a></b> ·
+  <b><a href="#-gestures">Gestures</a></b> ·
+  <b><a href="#-making-it-look-good-on-camera">Filming tips</a></b> ·
+  <b><a href="#-troubleshooting">Troubleshooting</a></b> ·
+  <b><a href="#-how-it-works">How it works</a></b>
+</p>
+
+<p><sub>No app · No account · No cloud · No API keys<br>
+Runs in your browser, on your machine.</sub></p>
 
 <img src="docs/media/demo.gif" alt="Writing hello in the air, and it appears on the wall as glowing ink" width="720">
 
 </div>
 
-## What it does
+---
+
+## ✨ What it does
 
 - **Point to write.** Your index finger is the pen. Raise a second finger to lift it between letters, like lifting a real pen.
 - **Show your palm to start.** Brackets lock onto your hand, a scan line sweeps the wall, and the pen ignites.
@@ -37,7 +56,7 @@ It all runs in the browser, offline, with no app to install and no cloud.
   </tr>
 </table>
 
-## What you need
+## 🧰 What you need
 
 | | |
 |---|---|
@@ -46,7 +65,7 @@ It all runs in the browser, offline, with no app to install and no cloud.
 | **A projector** | Pointed at the wall you write on. A TV or a second monitor works too. |
 | **Node.js 20.19 or newer** | To run the app locally. |
 
-## Quick start
+## ⚡ Quick start
 
 ```bash
 git clone https://github.com/Ishan-sa/air-writer.git
@@ -62,7 +81,7 @@ There are two windows:
 - **Control view** (your laptop screen): the camera feed, the status, calibration and settings.
 - **Wall view** (the projector): the ink and the heads-up display. Press **W** to open it.
 
-## Set it up in five steps
+## 🛠️ Set it up in five steps
 
 1. **Connect the projector** and set it to extend your desktop, not mirror it (macOS: *System Settings → Displays*).
 2. **Place the camera near the wall, facing you**, at about chest height, about 1 to 1.5 m from where you'll stand. It needs a clear view of your writing hand.
@@ -72,7 +91,7 @@ There are two windows:
 
 Not calibrated yet? It still works: ink is drawn big in front of you.
 
-## Gestures
+## ✋ Gestures
 
 | Do this | To |
 |---|---|
@@ -87,7 +106,7 @@ Prefer pinching? Switch *Draw with* to **Pinch** under Tuning, or press **P**.
 
 > **Write in one stroke where you can.** Cursive "hello" in a single movement looks the most natural on the wall.
 
-## Making it look good on camera
+## 🎥 Making it look good on camera
 
 **Lighting.** Turn the room lights down so the ink glows, but keep a dim light on yourself from the wall side. In the dark the camera can't see your hand, and an iPhone also slows its frame rate in low light, which makes the ink lag. The control view tells you when the light is too low or tracking slows down.
 
@@ -97,7 +116,7 @@ Prefer pinching? Switch *Draw with* to **Pinch** under Tuning, or press **P**.
 
 **Clean shot.** **H** hides the heads-up display and **V** hides the camera window, if you want just the ink.
 
-## Tuning
+## 🎛️ Tuning
 
 Under *Tuning* in the control view. Settings are remembered.
 
@@ -108,7 +127,7 @@ Under *Tuning* in the control view. Settings are remembered.
 | **Sparks** | you want more sparkle | sparks distract from the words |
 | **Pinch sensitivity** (pinch mode) | strokes break mid-pinch | ink appears when you didn't pinch |
 
-## Keys
+## ⌨️ Keys
 
 | Key | Where | What |
 |---|---|---|
@@ -122,7 +141,7 @@ Under *Tuning* in the control view. Settings are remembered.
 
 Tracking also pauses by itself while you type, click or move the mouse in the control view.
 
-## Troubleshooting
+## 🩺 Troubleshooting
 
 - **No camera.** Allow Chrome in *System Settings → Privacy & Security → Camera*. For an iPhone: same Apple ID as the Mac, Wi-Fi and Bluetooth on, phone nearby. Pick it from the camera menu under the video.
 - **Ink lags.** Check the frames-per-second readout. Below 20, add light on yourself, and keep the control window visible: Chrome slows down covered windows.
@@ -131,7 +150,7 @@ Tracking also pauses by itself while you type, click or move the mouse in the co
 - **The picture doesn't fill the projector.** On a Mac, set the projector's *Underscan* to off in Displays. On the projector, set aspect to Auto or 16:9, digital zoom to 100% and keystone to 0.
 - **No sound.** Click the wall window once. Browsers keep sound off until you do.
 
-## How it works
+## 🧠 How it works
 
 ```
  camera ──▶ control window ──BroadcastChannel──▶ wall window ──▶ projector
@@ -145,7 +164,7 @@ Tracking also pauses by itself while you type, click or move the mouse in the co
 - **Smoothing** is a [One Euro filter](https://gery.casiez.net/1euro/) on the hand, then a "lazy brush" string stabilizer and a light Gaussian pass on the stroke, the same tricks drawing apps use.
 - **Rendering** bakes finished strokes into an offscreen layer once, so only the live stroke is redrawn each frame.
 
-## Development
+## 🧑‍💻 Development
 
 ```bash
 npm test        # unit tests: gestures, calibration, start/stop flow, grab, smoothing
@@ -161,11 +180,11 @@ npm run dev:lan # serve over HTTPS on your network, to run it from another compu
 
 In dev mode the control and wall windows log tracking data to `logs/diag.jsonl`. Every tuning number in the code came from those logs. The original design notes are in [docs/specs](docs/specs/2026-10-17-air-writer-design.md).
 
-## Credits
+## 🙏 Credits
 
 The hand model in `public/models/hand_landmarker.task` is Google's [MediaPipe Hand Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker), used under the Apache License 2.0.
 
-## License
+## 📄 License
 
 [MIT](LICENSE) © Ishan Sachdeva
 

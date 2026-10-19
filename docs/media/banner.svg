@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300" width="900" height="300">
+  <defs>
+    <radialGradient id="warm" cx="50%" cy="45%" r="50%"><stop offset="0" stop-color="#ff9a3c" stop-opacity="0.18"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/></radialGradient>
+    <radialGradient id="cold" cx="96%" cy="0%" r="60%"><stop offset="0" stop-color="#7c5cff" stop-opacity="0.26"/><stop offset="1" stop-color="#7c5cff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="ink" x1="0" x2="1"><stop offset="0" stop-color="#ffc56b"/><stop offset="1" stop-color="#ffe6bf"/></linearGradient>
+    <filter id="glow" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur stdDeviation="10"/></filter>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><rect x="11" y="11" width="1.6" height="1.6" fill="#ffffff" opacity="0.06"/></pattern>
+  </defs>
+  <rect x="1" y="1" width="898" height="298" rx="22" fill="#0b0d11" stroke="#1f2630"/>
+  <rect x="1" y="1" width="898" height="298" rx="22" fill="url(#grid)"/>
+  <rect x="1" y="1" width="898" height="298" rx="22" fill="url(#warm)"/>
+  <rect x="1" y="1" width="898" height="298" rx="22" fill="url(#cold)"/>
+
+  <g fill="none" stroke="#78e4ff" stroke-width="2" opacity="0.85">
+    <path d="M52,26H30V48"/><path d="M848,26H870V48"/><path d="M848,274H870V252"/><path d="M52,274H30V252"/>
+  </g>
+  <circle cx="50" cy="44" r="4" fill="#ff5446"/>
+  <text x="62" y="48" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" letter-spacing="2.5" fill="#d6f8ff" font-weight="700">LIVE · CAM 01</text>
+  <text x="850" y="48" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" letter-spacing="2" fill="#78e4ff" opacity="0.7">21 PTS · 30 FPS</text>
+
+  <!-- wordmark: "writer" glows like the ink -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="76" font-weight="800" letter-spacing="2" text-anchor="middle">
+    <text x="450" y="156"><tspan fill="#f2f4f1">air</tspan><tspan fill="#ff8a1e" opacity="0" dx="22">writer</tspan></text>
+    <text x="450" y="156" filter="url(#glow)" opacity="0.7"><tspan fill="none">air</tspan><tspan fill="#ff8a1e" dx="22">writer</tspan></text>
+    <text x="450" y="156"><tspan fill="none">air</tspan><tspan fill="url(#ink)" dx="22">writer</tspan></text>
+  </g>
+
+  <!-- pen reticle -->
+  <g transform="translate(762,92)" fill="none" stroke="#78e4ff" stroke-width="1.8">
+    <path d="M0,-18 A18,18 0 0 1 16.9,-6.2"/><path d="M15.6,9 A18,18 0 0 1 -1.6,17.9"/><path d="M-16.9,6.2 A18,18 0 0 1 -9,-15.6"/>
+    <path d="M0,-30V-24M0,24V30M-30,0H-24M24,0H30" opacity="0.7"/>
+    <circle r="3.4" fill="#fff4dd" stroke="none"/>
+  </g>
+
+  <!-- ruler -->
+  <g fill="#78e4ff" opacity="0.45">
+    <rect x="300" y="190" width="300" height="1"/>
+    <rect x="300" y="184" width="1.2" height="7"/><rect x="330" y="187" width="1.2" height="4"/><rect x="360" y="187" width="1.2" height="4"/><rect x="390" y="187" width="1.2" height="4"/><rect x="420" y="187" width="1.2" height="4"/>
+    <rect x="450" y="184" width="1.2" height="7"/><rect x="480" y="187" width="1.2" height="4"/><rect x="510" y="187" width="1.2" height="4"/><rect x="540" y="187" width="1.2" height="4"/><rect x="570" y="187" width="1.2" height="4"/><rect x="600" y="184" width="1.2" height="7"/>
+  </g>
+  <path d="M450,182 l-5,-7 h10 z" fill="#ffb452"/>
+
+  <text x="450" y="232" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" letter-spacing="4" fill="#78e4ff">WRITE ON YOUR WALL WITH YOUR FINGER</text>
+</svg>
