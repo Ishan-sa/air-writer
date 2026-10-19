@@ -112,7 +112,7 @@ A projector can't project true black. Its "black" is dim light, so the whole pro
 
 ## Light and dark
 
-The control view starts in **Dark**: dim darkroom reds that won't light up your scene or spill into the shot. Switch to **Light** while setting up with the room lights on, or pick **Auto** to follow your Mac's appearance. The switch sits at the bottom of the side panel, and **T** cycles through the three. The wall view is always black, because that's what the projector shows as "no light". Its heads-up display is always cyan, so the warm ink stands out.
+The control view starts in **Dark**: dim darkroom reds that won’t light up your scene or spill into the shot, with the camera picture in true colours, slightly dimmed. Switch to **Light** while setting up with the room lights on, or pick **Auto** to follow your Mac's appearance. The switch sits at the bottom of the side panel, and **T** cycles through the three. The wall view is always black, because that's what the projector shows as "no light". Its heads-up display is always cyan, so the warm ink stands out.
 
 ## Tuning (control view → Tuning)
 

@@ -16,7 +16,7 @@
   --glow: #ff5436; /* live states only: writing, active targets */
   --hush: #2a0f0b; /* button and track fills */
   --main-hover: #e8907c;
-  --feed-filter: grayscale(1) contrast(1.2) brightness(0.3) sepia(1) hue-rotate(-45deg) saturate(3.5) brightness(0.85); /* safelight: tints only the video pixels */
+  --feed-filter: brightness(0.75) saturate(0.85); /* true colours, just dimmed so the screen doesn't light the room */
   --live-shadow: 0 0 28px rgba(255, 84, 54, 0.35);
   --stage: #000;
   /* hand skeleton drawn over the feed */
@@ -36,7 +36,7 @@
   --glow: #cf2a0f;
   --hush: #ede1de;
   --main-hover: #5a1d13;
-  --feed-filter: grayscale(1) contrast(1.1) brightness(0.85) sepia(1) hue-rotate(-42deg) saturate(3.2);
+  --feed-filter: none;
   --bone: rgba(61, 19, 12, 0.85);
   --joint: #3d130c;
   --pen: #cf2a0f;
@@ -53,7 +53,7 @@
     --glow: #cf2a0f;
     --hush: #ede1de;
     --main-hover: #5a1d13;
-    --feed-filter: grayscale(1) contrast(1.1) brightness(0.85) sepia(1) hue-rotate(-42deg) saturate(3.2);
+    --feed-filter: none;
   --bone: rgba(61, 19, 12, 0.85);
   --joint: #3d130c;
   --pen: #cf2a0f;
