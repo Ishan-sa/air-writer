@@ -2,6 +2,13 @@
   "name": "air-writer",
   "private": true,
   "version": "0.1.0",
+  "description": "Write on your wall with your finger: hand tracking in the browser, sparkler ink on a projector.",
+  "license": "MIT",
+  "author": "Ishan Sachdeva (https://ishansa.dev)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ishan-sa/air-writer.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
