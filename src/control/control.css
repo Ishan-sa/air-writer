@@ -91,6 +91,9 @@ body {
   font-weight: 800;
   font-stretch: 125%;
   letter-spacing: -0.02em;
+  white-space: nowrap; /* one line always, for the same reason */
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--dim);
   transition: color 120ms linear, text-shadow 120ms linear;
 }
@@ -104,6 +107,9 @@ body {
 .state-detail {
   margin: 12px 0 0;
   max-width: 70ch;
+  /* room for the longest message, so the camera and panel below never jump when the status changes */
+  line-height: 1.5;
+  min-height: 6em;
   font-size: 18px;
   font-stretch: 100%;
   color: var(--dim);
